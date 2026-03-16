@@ -6,7 +6,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isInstitutionalEmail() {
+    function isInstitutional() {
       return isSignedIn() && request.auth.token.email.matches('.*@neu\\.edu\\.ph$');
     }
 
@@ -27,13 +27,16 @@ service cloud.firestore {
 
     match /moas/{moaId} {
       // Institutional users can list/read approved MOAs
-      allow read, list: if isInstitutionalEmail();
+      // For 'list' to work, students MUST provide the corresponding filters in their query
+      allow read, list: if isInstitutional() && (
+        hasRole('admin') || 
+        hasRole('faculty') || 
+        (resource.data.isDeleted == false && resource.data.status >= 'APPROVED' && resource.data.status < 'APPROVEE')
+      );
 
       // Maintenance restricted to Admin and Faculty
-      allow create, update: if isInstitutionalEmail() && (hasRole('admin') || hasRole('faculty'));
-      
-      // Explicit recovery logic for Admins
-      allow update: if isInstitutionalEmail() && hasRole('admin');
+      allow create: if isInstitutional() && (hasRole('admin') || hasRole('faculty'));
+      allow update: if isInstitutional() && (hasRole('admin') || hasRole('faculty'));
       
       allow delete: if false; // Use soft delete (isDeleted: true)
     }

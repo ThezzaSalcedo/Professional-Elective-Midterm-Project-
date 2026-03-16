@@ -41,7 +41,7 @@ export interface InternalQuery extends Query<DocumentData> {
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
 ): UseCollectionResult<T> {
-  const { isUserLoading } = useUser();
+  const { isUserLoading, isProfileLoading } = useUser();
   type ResultItemType = WithId<T>;
   type StateDataType = ResultItemType[] | null;
 
@@ -50,10 +50,10 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // GUARD: Only trigger if query is provided AND auth is fully loaded
-    if (!memoizedTargetRefOrQuery || isUserLoading) {
+    // GUARD: Only trigger if query is provided AND auth + profile are fully loaded
+    if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading) {
       setData(null);
-      setIsLoading(isUserLoading);
+      setIsLoading(isUserLoading || isProfileLoading);
       setError(null);
       return;
     }
@@ -91,7 +91,7 @@ export function useCollection<T = any>(
     );
 
     return () => unsubscribe();
-  }, [memoizedTargetRefOrQuery, isUserLoading]);
+  }, [memoizedTargetRefOrQuery, isUserLoading, isProfileLoading]);
 
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');

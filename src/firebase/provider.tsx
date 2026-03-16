@@ -2,7 +2,7 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
 
@@ -16,6 +16,7 @@ interface FirebaseProviderProps {
 interface UserAuthState {
   user: User | null;
   isUserLoading: boolean;
+  isProfileLoading: boolean;
   userError: Error | null;
 }
 
@@ -26,6 +27,7 @@ export interface FirebaseContextState {
   auth: Auth | null;
   user: User | null;
   isUserLoading: boolean;
+  isProfileLoading: boolean;
   userError: Error | null;
 }
 
@@ -35,12 +37,14 @@ export interface FirebaseServicesAndUser {
   auth: Auth;
   user: User | null;
   isUserLoading: boolean;
+  isProfileLoading: boolean;
   userError: Error | null;
 }
 
 export interface UserHookResult {
   user: User | null;
   isUserLoading: boolean;
+  isProfileLoading: boolean;
   userError: Error | null;
 }
 
@@ -55,61 +59,63 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
   const [userAuthState, setUserAuthState] = useState<UserAuthState>({
     user: null,
     isUserLoading: true,
+    isProfileLoading: true,
     userError: null,
   });
 
   useEffect(() => {
     if (!auth) {
-      setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth service not provided.") });
+      setUserAuthState(prev => ({ ...prev, isUserLoading: false, userError: new Error("Auth service not provided.") }));
       return;
     }
 
     const unsubscribe = onAuthStateChanged(
       auth,
-      (firebaseUser) => {
-        setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
+      async (firebaseUser) => {
+        if (firebaseUser) {
+          setUserAuthState(prev => ({ ...prev, user: firebaseUser, isUserLoading: false, isProfileLoading: true }));
+          
+          // Automated Role Initialization
+          const userRef = doc(firestore, 'users', firebaseUser.uid);
+          try {
+            const docSnap = await getDoc(userRef);
+            if (!docSnap.exists()) {
+              const email = firebaseUser.email || '';
+              const isInstitutional = email.toLowerCase().endsWith('@neu.edu.ph');
+              
+              if (isInstitutional) {
+                let roleName = 'student';
+                if (email.toLowerCase().includes('admin')) roleName = 'admin';
+                else if (email.toLowerCase().includes('faculty')) roleName = 'faculty';
+
+                await setDoc(userRef, {
+                  id: firebaseUser.uid,
+                  email: email,
+                  fullName: firebaseUser.displayName || 'Institutional User',
+                  role: roleName,
+                  canAddMoa: roleName !== 'student',
+                  canEditMoa: roleName !== 'student',
+                  canDeleteMoa: roleName === 'admin',
+                  isBlocked: false,
+                  createdAt: new Date().toISOString()
+                });
+              }
+            }
+          } catch (err) {
+            console.error("FirebaseProvider: Profile sync error:", err);
+          } finally {
+            setUserAuthState(prev => ({ ...prev, isProfileLoading: false }));
+          }
+        } else {
+          setUserAuthState({ user: null, isUserLoading: false, isProfileLoading: false, userError: null });
+        }
       },
       (error) => {
-        setUserAuthState({ user: null, isUserLoading: false, userError: error });
+        setUserAuthState({ user: null, isUserLoading: false, isProfileLoading: false, userError: error });
       }
     );
     return () => unsubscribe();
-  }, [auth]);
-
-  // Automated Role Initialization
-  useEffect(() => {
-    const ensureUserProfile = async () => {
-      if (userAuthState.user && !userAuthState.isUserLoading && firestore) {
-        const userRef = doc(firestore, 'users', userAuthState.user.uid);
-        try {
-          const docSnap = await getDoc(userRef);
-          if (!docSnap.exists()) {
-            const email = userAuthState.user.email || '';
-            const isInstitutional = email.toLowerCase().endsWith('@neu.edu.ph');
-            
-            // Only initialize profile for institutional users
-            if (isInstitutional) {
-              await setDoc(userRef, {
-                id: userAuthState.user.uid,
-                email: email,
-                fullName: userAuthState.user.displayName || 'Institutional User',
-                role: 'student', // Default role
-                canAddMoa: false,
-                canEditMoa: false,
-                canDeleteMoa: false,
-                isBlocked: false,
-                createdAt: new Date().toISOString()
-              });
-            }
-          }
-        } catch (err) {
-          console.error("FirebaseProvider: Role initialization error:", err);
-        }
-      }
-    };
-
-    ensureUserProfile();
-  }, [userAuthState.user, userAuthState.isUserLoading, firestore]);
+  }, [auth, firestore]);
 
   const contextValue = useMemo((): FirebaseContextState => {
     const servicesAvailable = !!(firebaseApp && firestore && auth);
@@ -120,6 +126,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       auth: servicesAvailable ? auth : null,
       user: userAuthState.user,
       isUserLoading: userAuthState.isUserLoading,
+      isProfileLoading: userAuthState.isProfileLoading,
       userError: userAuthState.userError,
     };
   }, [firebaseApp, firestore, auth, userAuthState]);
@@ -146,6 +153,7 @@ export const useFirebase = (): FirebaseServicesAndUser => {
     auth: context.auth,
     user: context.user,
     isUserLoading: context.isUserLoading,
+    isProfileLoading: context.isProfileLoading,
     userError: context.userError,
   };
 };
@@ -180,6 +188,7 @@ export const useUser = (): UserHookResult => {
   return { 
     user: context.user, 
     isUserLoading: context.isUserLoading, 
+    isProfileLoading: context.isProfileLoading,
     userError: context.userError 
   };
 };
