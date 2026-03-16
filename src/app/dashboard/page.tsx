@@ -1,9 +1,10 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, doc, setDoc } from 'firebase/firestore';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { 
   CheckCircle2, 
@@ -11,33 +12,37 @@ import {
   AlertTriangle, 
   FileX2, 
   Search,
-  Filter,
   Plus,
-  ChevronLeft,
-  ChevronRight,
-  Loader2
+  Loader2,
+  Database,
+  Sparkles
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { MOA } from '../lib/types';
+import { MOA, MOAStatus, AuditLog } from '../lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, firebaseUser } = useAuth();
   const { firestore } = useFirebase();
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
+  const [isSeeding, setIsSeeding] = useState(false);
 
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
-    if (user.role === 'Student') {
-      return query(base, where('isSoftDeleted', '==', false));
-    } else if (user.role === 'Faculty') {
-      return query(base, where('isSoftDeleted', '==', false));
-    }
-    return base;
+    // Admins see everything (including deleted for the count)
+    if (user.role === 'Admin') return base;
+    
+    // Faculty see all active
+    if (user.role === 'Faculty') return query(base, where('isSoftDeleted', '==', false));
+    
+    // Students only see approved active
+    return query(base, where('isSoftDeleted', '==', false));
   }, [firestore, user]);
 
   const { data: moas, isLoading } = useCollection<MOA>(moaQuery);
@@ -76,6 +81,103 @@ export default function DashboardPage() {
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
   }, [moas]);
+
+  const handleSeedData = async () => {
+    if (!firestore || !user || !firebaseUser) return;
+    setIsSeeding(true);
+
+    const sampleMoas: Omit<MOA, 'id' | 'auditTrail' | 'createdAt' | 'updatedAt'>[] = [
+      {
+        hteId: 'HTE-2024-001',
+        companyName: 'Global Technology Solutions',
+        address: '123 Innovation Way, Makati City',
+        contactPerson: 'Maria Rodriguez',
+        contactEmail: 'm.rodriguez@globaltech.com',
+        industryType: 'Tech',
+        effectiveDate: '2024-01-15',
+        college: 'College of Computer Studies',
+        status: 'APPROVED: Signed by President',
+        isSoftDeleted: false,
+      },
+      {
+        hteId: 'HTE-2024-002',
+        companyName: 'Lumina Finance Group',
+        address: '88 Banking Tower, BGC Taguig',
+        contactPerson: 'Robert Tan',
+        contactEmail: 'rtan@luminafinance.com',
+        industryType: 'Finance',
+        effectiveDate: '2024-02-10',
+        college: 'College of Business Administration',
+        status: 'PROCESSING: Sent to Legal',
+        isSoftDeleted: false,
+      },
+      {
+        hteId: 'HTE-2023-089',
+        companyName: 'Fresh Farms Logistics',
+        address: '45 Industrial Road, Quezon City',
+        contactPerson: 'Elena Cruz',
+        contactEmail: 'ecruz@freshfarms.ph',
+        industryType: 'Food',
+        effectiveDate: '2023-11-20',
+        college: 'College of Agriculture',
+        status: 'APPROVED: No notarization needed',
+        isSoftDeleted: false,
+      },
+      {
+        hteId: 'HTE-2024-044',
+        companyName: 'Telecom Unity',
+        address: 'Unit 401, Communication Plaza, Manila',
+        contactPerson: 'Juan Dela Cruz',
+        contactEmail: 'jdc@telecomunity.com',
+        industryType: 'Telecom',
+        effectiveDate: '2024-03-01',
+        college: 'College of Engineering',
+        status: 'PROCESSING: Awaiting signature',
+        isSoftDeleted: false,
+      },
+      {
+        hteId: 'HTE-OLD-005',
+        companyName: 'Archived Solutions Inc.',
+        address: 'Unknown Street, Old City',
+        contactPerson: 'Jane Doe',
+        contactEmail: 'jane@archived.com',
+        industryType: 'Services',
+        effectiveDate: '2022-05-10',
+        college: 'College of Arts and Sciences',
+        status: 'EXPIRED',
+        isSoftDeleted: true,
+      }
+    ];
+
+    try {
+      for (const item of sampleMoas) {
+        const id = Math.random().toString(36).substr(2, 9);
+        const ref = doc(firestore, 'moas', id);
+        
+        const auditLog: AuditLog = {
+          id: Math.random().toString(36).substr(2, 9),
+          userId: firebaseUser.uid,
+          userName: user.name,
+          timestamp: new Date().toISOString(),
+          operation: 'Insert',
+          details: 'Sample data seeding'
+        };
+
+        await setDoc(ref, {
+          ...item,
+          id,
+          auditTrail: [auditLog],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+      toast({ title: "Seeding Complete", description: "Sample MOA collection created successfully." });
+    } catch (err) {
+      toast({ title: "Seeding Failed", description: "Failed to create sample records.", variant: "destructive" });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -173,14 +275,27 @@ export default function DashboardPage() {
           <p className="text-muted-foreground mt-1 font-medium">Monitoring NEU's institutional partnerships</p>
         </div>
         
-        {user?.role !== 'Student' && (user?.role === 'Admin' || user?.canEdit) && (
-          <Button asChild className="gap-2 bg-accent hover:bg-accent/90">
-            <Link href="/dashboard/moas/new">
-              <Plus className="w-4 h-4" />
-              New Agreement
-            </Link>
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {user?.role === 'Admin' && (
+            <Button 
+              variant="outline" 
+              onClick={handleSeedData} 
+              disabled={isSeeding}
+              className="gap-2 border-accent text-accent hover:bg-accent/5"
+            >
+              {isSeeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+              Seed Sample Data
+            </Button>
+          )}
+          {(user?.role === 'Admin' || user?.canEdit) && (
+            <Button asChild className="gap-2 bg-primary hover:bg-primary/90">
+              <Link href="/dashboard/moas/new">
+                <Plus className="w-4 h-4" />
+                New Agreement
+              </Link>
+            </Button>
+          )}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -197,8 +312,11 @@ export default function DashboardPage() {
 
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden mt-8">
         <div className="px-6 py-4 border-b flex items-center justify-between bg-muted/20">
-          <h3 className="font-semibold text-foreground">Recent Activity</h3>
-          <Link href="/dashboard/moas" className="text-sm font-medium text-accent hover:underline">View all</Link>
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-accent" />
+            <h3 className="font-semibold text-foreground">Recent Partnerships</h3>
+          </div>
+          <Link href="/dashboard/moas" className="text-sm font-medium text-accent hover:underline">View registry</Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -213,7 +331,7 @@ export default function DashboardPage() {
             </thead>
             <tbody className="divide-y">
               {visibleMoas.slice(0, 5).map((m) => (
-                <tr key={m.id} className="hover:bg-muted/10 transition-colors">
+                <tr key={m.id} className={cn("hover:bg-muted/10 transition-colors", m.isSoftDeleted && "bg-muted/30 grayscale-[0.5]")}>
                   <td className="px-6 py-4 font-medium">{m.companyName}</td>
                   <td className="px-6 py-4 text-muted-foreground">{m.college}</td>
                   <td className="px-6 py-4">
@@ -233,11 +351,18 @@ export default function DashboardPage() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/dashboard/moas`}>View</Link>
+                      <Link href={`/dashboard/moas`}>Details</Link>
                     </Button>
                   </td>
                 </tr>
               ))}
+              {visibleMoas.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic">
+                    No partnership records found. Use "Seed Sample Data" or "New Agreement" to start.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
