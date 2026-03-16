@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -7,13 +6,15 @@ import { useAuth } from './context/AuthContext';
 import { useFirebase } from '@/firebase';
 import { initiateEmailSignIn, initiateGoogleSignIn } from '@/firebase/non-blocking-login';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
+import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, Eye, EyeOff, Beaker } from 'lucide-react';
+import { ShieldCheck, Loader2, Eye, EyeOff, Beaker, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -27,6 +28,7 @@ export default function HomePage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setHasMounted(true);
@@ -37,6 +39,7 @@ export default function HomePage() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     if (!email || !password) return;
     
     setIsLoggingIn(true);
@@ -44,23 +47,32 @@ export default function HomePage() {
       await initiateEmailSignIn(auth, email, password);
     } catch (error: any) {
       setIsLoggingIn(false);
+      let msg = "Invalid email or password.";
+      if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
+      if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
+      if (error.code === 'auth/invalid-credential') msg = "Invalid credentials. Please double-check your input.";
+      
+      setErrorMessage(msg);
       toast({
         title: "Login Failed",
-        description: error.message || "Invalid credentials. Please try again.",
+        description: msg,
         variant: "destructive"
       });
     }
   };
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
+    setErrorMessage(null);
     try {
-      initiateGoogleSignIn(auth);
+      await initiateGoogleSignIn(auth);
     } catch (error: any) {
       setIsLoggingIn(false);
+      const msg = error.message || "Could not connect to Google.";
+      setErrorMessage(msg);
       toast({
         title: "Google Login Failed",
-        description: error.message || "Could not connect to Google.",
+        description: msg,
         variant: "destructive"
       });
     }
@@ -77,8 +89,8 @@ export default function HomePage() {
       const userCredential = await createUserWithEmailAndPassword(auth, facultyEmail, facultyPass);
       const uid = userCredential.user.uid;
 
-      // Create Firestore Profile
-      await setDoc(doc(firestore, 'faculty', uid), {
+      // Create Firestore Profile using non-blocking utility
+      setDocumentNonBlocking(doc(firestore, 'faculty', uid), {
         id: uid,
         email: facultyEmail,
         fullName: "Primary Faculty Admin",
@@ -86,17 +98,17 @@ export default function HomePage() {
         canAddMoa: true,
         canEditMoa: true,
         canDeleteMoa: true
-      });
+      }, { merge: true });
 
       toast({
-        title: "Success",
-        description: `Account ${facultyEmail} created! You can now log in.`,
+        title: "Account Created",
+        description: `Account ${facultyEmail} is ready! You can now log in.`,
       });
       setEmail(facultyEmail);
       setPassword(facultyPass);
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {
-        toast({ title: "Account Exists", description: "This demo account is already registered." });
+        toast({ title: "Account Ready", description: "The faculty demo account is already registered." });
         setEmail(facultyEmail);
         setPassword(facultyPass);
       } else {
@@ -120,6 +132,14 @@ export default function HomePage() {
           <p className="text-muted-foreground mt-2 font-medium">NEU MOA Monitoring System</p>
         </div>
 
+        {errorMessage && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email" className="text-sm font-semibold">Institutional Email</Label>
@@ -132,6 +152,7 @@ export default function HomePage() {
               onChange={(e) => setEmail(e.target.value)}
               className="h-11"
               disabled={isLoggingIn}
+              suppressHydrationWarning
             />
           </div>
           
@@ -147,6 +168,7 @@ export default function HomePage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-11 pr-10"
                 disabled={isLoggingIn}
+                suppressHydrationWarning
               />
               <button
                 type="button"
@@ -195,12 +217,12 @@ export default function HomePage() {
           <Button 
             variant="ghost" 
             size="sm" 
-            className="w-full text-xs gap-2 text-accent"
+            className="w-full text-xs gap-2 text-accent/80 hover:text-accent"
             onClick={seedFacultyAccount}
             disabled={isSeeding}
           >
             {isSeeding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Beaker className="w-3 h-3" />}
-            Development: Create Faculty Demo Account
+            Development: Setup Faculty Demo Account
           </Button>
           <p className="text-[10px] text-muted-foreground text-center">
             Institutional access only. Use your NEU credentials.
