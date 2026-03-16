@@ -12,6 +12,7 @@ export type MOAStatus =
 
 export type AuditLog = {
   id: string;
+  userId: string;
   userName: string;
   timestamp: string;
   operation: 'Insert' | 'Edit' | 'Soft-Delete' | 'Recover';
@@ -24,13 +25,15 @@ export type MOA = {
   companyName: string;
   address: string;
   contactPerson: string;
-  email: string;
+  contactEmail: string;
   industryType: string;
   effectiveDate: string;
   college: string;
   status: MOAStatus;
-  isDeleted: boolean;
+  isSoftDeleted: boolean;
   auditTrail: AuditLog[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type User = {

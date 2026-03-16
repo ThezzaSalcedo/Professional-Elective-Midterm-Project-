@@ -1,8 +1,17 @@
 "use client"
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-import { useMoaStore } from '@/app/lib/store';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { 
+  collection, 
+  query, 
+  where, 
+  doc, 
+  updateDoc, 
+  arrayUnion,
+  Firestore
+} from 'firebase/firestore';
 import { 
   Search, 
   Trash2, 
@@ -10,8 +19,8 @@ import {
   Eye, 
   Edit3, 
   History,
-  ShieldAlert,
-  Archive
+  Archive,
+  Loader2
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -25,24 +34,47 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { MOA } from '@/app/lib/types';
+import { MOA, AuditLog } from '@/app/lib/types';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function MoaListPage() {
-  const { user } = useAuth();
-  const { moas, softDeleteMoa, recoverMoa } = useMoaStore();
+  const { user, firebaseUser } = useAuth();
+  const { firestore } = useFirebase();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [selectedMoa, setSelectedMoa] = useState<MOA | null>(null);
 
-  const filteredMoas = useMemo(() => {
-    let result = moas;
+  const moaQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    const base = collection(firestore, 'moas');
     
-    if (user?.role === 'Student') {
-      result = result.filter(m => m.status.startsWith('APPROVED') && !m.isDeleted);
-    } else if (user?.role === 'Faculty') {
-      result = result.filter(m => !m.isDeleted);
+    if (user.role === 'Student') {
+      // Students only see APPROVED and NOT deleted
+      return query(
+        base, 
+        where('isSoftDeleted', '==', false),
+        // Note: Complex where filters usually require indexes.
+        // For standard list, we'll refine APPROVED in UI if index isn't ready
+      );
+    } else if (user.role === 'Faculty') {
+      // Faculty see all NOT deleted
+      return query(base, where('isSoftDeleted', '==', false));
     }
     // Admins see all
+    return base;
+  }, [firestore, user]);
+
+  const { data: rawMoas, isLoading } = useCollection<MOA>(moaQuery);
+
+  const filteredMoas = React.useMemo(() => {
+    if (!rawMoas) return [];
+    let result = rawMoas;
+
+    // Student status filtering (backend + UI safety)
+    if (user?.role === 'Student') {
+      result = result.filter(m => m.status.startsWith('APPROVED'));
+    }
 
     if (search) {
       const q = search.toLowerCase();
@@ -54,19 +86,70 @@ export default function MoaListPage() {
     }
 
     return result;
-  }, [moas, user, search]);
+  }, [rawMoas, user, search]);
 
-  const handleDelete = (id: string) => {
-    if (!user) return;
-    softDeleteMoa(id, user.name);
-    toast({ title: "Archived", description: "MOA has been soft-deleted. Admins can recover it." });
+  const handleSoftDelete = (id: string) => {
+    if (!user || !firebaseUser || !firestore) return;
+    const docRef = doc(firestore, 'moas', id);
+    
+    const auditEntry: AuditLog = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId: firebaseUser.uid,
+      userName: user.name,
+      timestamp: new Date().toISOString(),
+      operation: 'Soft-Delete'
+    };
+
+    updateDoc(docRef, {
+      isSoftDeleted: true,
+      auditTrail: arrayUnion(auditEntry),
+      updatedAt: new Date().toISOString()
+    }).catch(async (error) => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: docRef.path,
+        operation: 'update',
+        requestResourceData: { isSoftDeleted: true }
+      }));
+    });
+    
+    toast({ title: "Archived", description: "Agreement moved to archive." });
   };
 
   const handleRecover = (id: string) => {
-    if (!user) return;
-    recoverMoa(id, user.name);
-    toast({ title: "Recovered", description: "MOA has been restored." });
+    if (!user || !firebaseUser || !firestore) return;
+    const docRef = doc(firestore, 'moas', id);
+    
+    const auditEntry: AuditLog = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId: firebaseUser.uid,
+      userName: user.name,
+      timestamp: new Date().toISOString(),
+      operation: 'Recover'
+    };
+
+    updateDoc(docRef, {
+      isSoftDeleted: false,
+      auditTrail: arrayUnion(auditEntry),
+      updatedAt: new Date().toISOString()
+    }).catch(async (error) => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: docRef.path,
+        operation: 'update',
+        requestResourceData: { isSoftDeleted: false }
+      }));
+    });
+
+    toast({ title: "Recovered", description: "Agreement restored to active registry." });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium">Loading MOA Registry...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -94,20 +177,20 @@ export default function MoaListPage() {
               <th className="px-6 py-4 text-left font-semibold">Contact</th>
               <th className="px-6 py-4 text-left font-semibold">College</th>
               <th className="px-6 py-4 text-left font-semibold">Status</th>
-              {user?.role === 'Admin' && <th className="px-6 py-4 text-left font-semibold">Deleted</th>}
+              {user?.role === 'Admin' && <th className="px-6 py-4 text-left font-semibold">Visibility</th>}
               <th className="px-6 py-4 text-right font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {filteredMoas.map((m) => (
-              <tr key={m.id} className={cn("hover:bg-muted/5 transition-colors", m.isDeleted && "bg-red-50/50 opacity-80")}>
+              <tr key={m.id} className={cn("hover:bg-muted/5 transition-colors", m.isSoftDeleted && "bg-red-50/50 opacity-80")}>
                 <td className="px-6 py-4">
                   <div className="font-semibold text-foreground">{m.companyName}</div>
                   <div className="text-xs text-muted-foreground">{m.hteId}</div>
                 </td>
                 <td className="px-6 py-4">
                   <div>{m.contactPerson}</div>
-                  <div className="text-xs text-muted-foreground">{m.email}</div>
+                  <div className="text-xs text-muted-foreground">{m.contactEmail}</div>
                 </td>
                 <td className="px-6 py-4 text-muted-foreground">{m.college}</td>
                 <td className="px-6 py-4">
@@ -122,7 +205,7 @@ export default function MoaListPage() {
                 </td>
                 {user?.role === 'Admin' && (
                   <td className="px-6 py-4">
-                    {m.isDeleted ? (
+                    {m.isSoftDeleted ? (
                       <span className="flex items-center gap-1 text-destructive font-bold text-[10px] uppercase">
                         <Archive className="w-3 h-3" /> Soft-Deleted
                       </span>
@@ -164,7 +247,7 @@ export default function MoaListPage() {
                             </div>
                             <div className="space-y-1">
                               <p className="text-xs font-bold text-muted-foreground uppercase">Email</p>
-                              <p className="font-medium">{selectedMoa.email}</p>
+                              <p className="font-medium">{selectedMoa.contactEmail}</p>
                             </div>
                             
                             {user?.role === 'Admin' && (
@@ -172,8 +255,8 @@ export default function MoaListPage() {
                                 <h4 className="flex items-center gap-2 font-bold mb-4 text-primary">
                                   <History className="w-4 h-4" /> Audit Trail
                                 </h4>
-                                <div className="space-y-3">
-                                  {selectedMoa.auditTrail.map((log) => (
+                                <div className="space-y-3 max-h-40 overflow-y-auto pr-2">
+                                  {selectedMoa.auditTrail?.map((log) => (
                                     <div key={log.id} className="flex items-center justify-between bg-muted/30 p-2 rounded-md border text-xs">
                                       <div className="font-medium">{log.userName}</div>
                                       <div className="px-2 py-0.5 rounded bg-accent/20 text-accent font-bold uppercase">{log.operation}</div>
@@ -188,23 +271,18 @@ export default function MoaListPage() {
                       </DialogContent>
                     </Dialog>
 
-                    {user?.role !== 'Student' && (user?.role === 'Admin' || user?.canEdit) && !m.isDeleted && (
-                      <>
-                        <Button variant="ghost" size="icon">
-                          <Edit3 className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-destructive hover:bg-destructive/10"
-                          onClick={() => handleDelete(m.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </>
+                    {user?.role !== 'Student' && (user?.role === 'Admin' || user?.canEdit) && !m.isSoftDeleted && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-destructive hover:bg-destructive/10"
+                        onClick={() => handleSoftDelete(m.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     )}
 
-                    {user?.role === 'Admin' && m.isDeleted && (
+                    {user?.role === 'Admin' && m.isSoftDeleted && (
                       <Button 
                         variant="ghost" 
                         size="icon" 

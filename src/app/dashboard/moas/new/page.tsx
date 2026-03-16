@@ -3,31 +3,35 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-import { useMoaStore } from '@/app/lib/store';
+import { useFirebase } from '@/firebase';
+import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { classifyMoaIndustry } from '@/ai/flows/moa-industry-classifier';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
-import { MOAStatus } from '@/app/lib/types';
+import { MOAStatus, AuditLog } from '@/app/lib/types';
 import { Loader2, Sparkles, ChevronLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 import Link from 'next/link';
 
 export default function NewMoaPage() {
-  const { user } = useAuth();
-  const { addMoa } = useMoaStore();
+  const { user, firebaseUser } = useAuth();
+  const { firestore } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
   const [isClassifying, setIsClassifying] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     hteId: '',
     companyName: '',
     address: '',
     contactPerson: '',
-    email: '',
+    contactEmail: '',
     industryType: '',
     effectiveDate: '',
     college: '',
@@ -52,13 +56,45 @@ export default function NewMoaPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !firebaseUser || !firestore) return;
     
-    addMoa(formData, user.name);
-    toast({ title: "Success", description: "MOA has been successfully added to the registry." });
-    router.push('/dashboard/moas');
+    setIsSubmitting(true);
+    const moaId = Math.random().toString(36).substr(2, 9);
+    const moaRef = doc(firestore, 'moas', moaId);
+
+    const auditEntry: AuditLog = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId: firebaseUser.uid,
+      userName: user.name,
+      timestamp: new Date().toISOString(),
+      operation: 'Insert'
+    };
+
+    const finalData = {
+      ...formData,
+      id: moaId,
+      isSoftDeleted: false,
+      auditTrail: [auditEntry],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    setDoc(moaRef, finalData)
+      .then(() => {
+        toast({ title: "Success", description: "MOA has been successfully added to the registry." });
+        router.push('/dashboard/moas');
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: moaRef.path,
+          operation: 'create',
+          requestResourceData: finalData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => setIsSubmitting(false));
   };
 
   return (
@@ -104,7 +140,18 @@ export default function NewMoaPage() {
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="industryType">Industry Type</Label>
-                <Input id="industryType" placeholder="e.g. Telecom, Finance..." value={formData.industryType} onChange={e => setFormData({...formData, industryType: e.target.value})} />
+                <Select value={formData.industryType} onValueChange={(val) => setFormData({...formData, industryType: val})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Telecom">Telecom</SelectItem>
+                    <SelectItem value="Food">Food</SelectItem>
+                    <SelectItem value="Services">Services</SelectItem>
+                    <SelectItem value="Tech">Tech</SelectItem>
+                    <SelectItem value="Finance">Finance</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="college">Endorsed by College</Label>
@@ -123,8 +170,8 @@ export default function NewMoaPage() {
                 <Input id="contactPerson" placeholder="Full name of representative" required value={formData.contactPerson} onChange={e => setFormData({...formData, contactPerson: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" placeholder="representative@company.com" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                <Label htmlFor="contactEmail">Email Address</Label>
+                <Input id="contactEmail" type="email" placeholder="representative@company.com" required value={formData.contactEmail} onChange={e => setFormData({...formData, contactEmail: e.target.value})} />
               </div>
             </div>
 
@@ -140,13 +187,16 @@ export default function NewMoaPage() {
                   <SelectItem value="PROCESSING: Sent to VPAA/OP">PROCESSING: Sent to VPAA/OP</SelectItem>
                   <SelectItem value="APPROVED: Signed by President">APPROVED: Signed by President</SelectItem>
                   <SelectItem value="APPROVED: On-going notarization">APPROVED: On-going notarization</SelectItem>
+                  <SelectItem value="APPROVED: No notarization needed">APPROVED: No notarization needed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </CardContent>
           <CardFooter className="flex justify-end gap-3 pb-8">
             <Button variant="ghost" type="button" onClick={() => router.back()}>Cancel</Button>
-            <Button type="submit" className="bg-primary hover:bg-primary/90 px-8">Save Agreement</Button>
+            <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 px-8">
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Save Agreement"}
+            </Button>
           </CardFooter>
         </form>
       </Card>
