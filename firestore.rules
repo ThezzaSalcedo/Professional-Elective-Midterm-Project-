@@ -1,0 +1,148 @@
+/**
+ * MOA Track Security Rules
+ * 
+ * Core Philosophy:
+ * This ruleset implements a strictly governed Role-Based Access Control (RBAC) model.
+ * Authorization is decoupled from the data hierarchy by storing user roles and granular
+ * permissions (canAddMoa, canEditMoa, etc.) directly within a central /users/{userId} 
+ * document. Security decisions for all other collections depend on an automated 
+ * lookup of the authenticated user's profile document.
+ * 
+ * Data Structure:
+ * - /users/{userId}: Private user profiles and system-assigned permissions.
+ * - /moas/{moaId}: Memorandum of Agreement records, accessible based on role and status.
+ * - /moa_audit_logs/{logId}: Admin-only immutable audit trail.
+ * 
+ * Key Security Decisions:
+ * - Authorization Independence: User permissions are fetched from the user's document using get(), 
+ *   ensuring that changes to a user's role are immediately reflected across the app.
+ * - Query-Aware Permissions (QAPs): List operations for Students and Faculty are strictly 
+ *   constrained. Students are forced to filter for 'APPROVED' and non-deleted records, 
+ *   while Faculty must filter for non-deleted records.
+ * - Structural Segregation: Audit logs are separated into a top-level collection with 
+ *   Admin-only access to prevent tampering and simplify the security posture.
+ * - Soft-Delete Support: The rules explicitly check the 'isSoftDeleted' flag to hide 
+ *   decommissioned data from non-admin users.
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Global Helper Functions ---
+
+    /**
+     * @description Checks if the request is from an authenticated user.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user's UID matches the provided ID.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Retrieves the user's document data for permission checking.
+     */
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    /**
+     * @description Checks if the authenticated user has the 'Admin' role.
+     */
+    function isAdmin() {
+      return isSignedIn() && getUserData().role == 'Admin';
+    }
+
+    /**
+     * @description Checks if the authenticated user has the 'Faculty' role.
+     */
+    function isFaculty() {
+      return isSignedIn() && getUserData().role == 'Faculty';
+    }
+
+    /**
+     * @description Checks if the authenticated user has the 'Student' role.
+     */
+    function isStudent() {
+      return isSignedIn() && getUserData().role == 'Student';
+    }
+
+    /**
+     * @description Verifies if a Faculty user has a specific granular permission.
+     */
+    function hasFacultyPermission(permission) {
+      return isFaculty() && getUserData()[permission] == true;
+    }
+
+    /**
+     * @description Logic for reading a single MOA document based on user role and doc state.
+     */
+    function canReadMoaDoc(moaData) {
+      return isAdmin() || 
+             (isFaculty() && moaData.isSoftDeleted == false) || 
+             (isStudent() && moaData.status == 'APPROVED' && moaData.isSoftDeleted == false);
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Security rules for user profile documents.
+     * @path /users/{userId}
+     * @allow Authenticated user (get) their own profile; Admin (update) any profile.
+     * @deny Non-owners (get/list); Any non-admin (update/delete).
+     * @principle Enforces identity-based access and restricts role management to Admins.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Security rules for Memorandum of Agreement (MOA) records.
+     * @path /moas/{moaId}
+     * @allow Students (get/list) approved MOAs; Faculty (create/update) if permitted; Admins (all).
+     * @deny Students (create/update/delete); Unauthenticated users (all); Faculty (list) without delete filter.
+     * @principle Implements Query-Aware Permissions and role-based action validation.
+     */
+    match /moas/{moaId} {
+      allow get: if canReadMoaDoc(resource.data);
+      
+      // Forces client-side filtering for non-admin users
+      allow list: if isAdmin() || 
+                    (isFaculty() && request.query.isSoftDeleted == false) || 
+                    (isStudent() && request.query.status == 'APPROVED' && request.query.isSoftDeleted == false);
+      
+      allow create: if isAdmin() || 
+                    (hasFacultyPermission('canAddMoa') && request.resource.data.id == moaId);
+      
+      allow update: if resource != null && (isAdmin() || 
+                    (hasFacultyPermission('canEditMoa') && request.resource.data.id == resource.data.id));
+      
+      allow delete: if resource != null && (isAdmin() || 
+                    (hasFacultyPermission('canDeleteMoa')));
+    }
+
+    /**
+     * @description Security rules for the MOA Audit Logs.
+     * @path /moa_audit_logs/{logId}
+     * @allow Admin (get/list/create).
+     * @deny All non-admin users (all operations); Any user (update/delete).
+     * @principle Ensures an immutable, Admin-only audit trail for compliance.
+     */
+    match /moa_audit_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if false; // Audit logs must be immutable
+      allow delete: if false; // Audit logs must be immutable
+    }
+  }
+}
