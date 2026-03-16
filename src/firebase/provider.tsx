@@ -80,7 +80,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
             const docSnap = await getDoc(userRef);
             if (!docSnap.exists()) {
               const email = firebaseUser.email || '';
-              // Point 1: Auto-Profile Creation for institutional users
+              // Point 1: Immediate Auto-Profile Creation for institutional users
               if (email.toLowerCase().endsWith('@neu.edu.ph')) {
                 let roleName = 'student';
                 const lowerEmail = email.toLowerCase();
@@ -98,7 +98,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               }
             }
           } catch (err) {
-            console.error("FirebaseProvider: Profile initialization error:", err);
+            console.error("FirebaseProvider: Profile synchronization error:", err);
           } finally {
             setUserAuthState(prev => ({ ...prev, isProfileLoading: false }));
           }

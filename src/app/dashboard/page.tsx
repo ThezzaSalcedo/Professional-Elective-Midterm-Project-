@@ -12,9 +12,11 @@ import {
   FileX2, 
   Search,
   Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { MOA, AuditEntry } from '../lib/types';
@@ -27,6 +29,7 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('');
   const [isSeeding, setIsSeeding] = useState(false);
 
+  // Point 2: Query Alignment with Security Rules
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
@@ -53,7 +56,7 @@ export default function DashboardPage() {
     return null;
   }, [firestore, user]);
 
-  const { data: moas, isLoading: isMoaLoading } = useMoaCollection<MOA>(moaQuery);
+  const { data: moas, isLoading: isMoaLoading, error } = useMoaCollection<MOA>(moaQuery);
 
   const visibleMoas = useMemo(() => {
     if (!moas) return [];
@@ -143,6 +146,7 @@ export default function DashboardPage() {
     }
   };
 
+  // Point 3: Fallback UI / Loading Spinner
   if (isAuthLoading || isMoaLoading) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
@@ -165,6 +169,16 @@ export default function DashboardPage() {
           )}
         </div>
       </header>
+
+      {/* Point 4: Error Display */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error.message}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {stats.map((s) => (
@@ -207,7 +221,7 @@ export default function DashboardPage() {
             )) : (
               <tr>
                 <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">
-                  No agreements found matching your criteria.
+                  {error ? "Record synchronization failed." : "No agreements found matching your criteria."}
                 </td>
               </tr>
             )}

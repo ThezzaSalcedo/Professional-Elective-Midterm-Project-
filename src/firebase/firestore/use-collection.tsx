@@ -36,7 +36,7 @@ export interface InternalQuery extends Query<DocumentData> {
 }
 
 /**
- * Point 2: Standard useCollection hook with Auth/Profile Loading Guard.
+ * Point 1 & 2: Sequential Loading and error handling.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
@@ -50,8 +50,8 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // GUARD: The app must NOT attempt to fetch the collection until auth.currentUser 
-    // is defined and the user's document has been retrieved.
+    // GUARD: The app must NOT attempt to fetch the collection until auth is confirmed 
+    // and the user's document has been retrieved.
     if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading || !user) {
       setData(null);
       setIsLoading(isUserLoading || isProfileLoading);
@@ -73,21 +73,28 @@ export function useCollection<T = any>(
         setError(null);
         setIsLoading(false);
       },
-      (error: FirestoreError) => {
+      (firestoreError: FirestoreError) => {
         const path: string =
           memoizedTargetRefOrQuery.type === 'collection'
             ? (memoizedTargetRefOrQuery as CollectionReference).path
             : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
 
-        const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path,
-        })
+        let finalError: Error = firestoreError;
 
-        setError(contextualError)
-        setData(null)
-        setIsLoading(false)
-        errorEmitter.emit('permission-error', contextualError);
+        // Point 4: Custom Error Message for Permission Denied
+        if (firestoreError.code === 'permission-denied') {
+          finalError = new Error('Access Restricted: Please contact an Admin to verify your account rights.');
+          
+          const contextualError = new FirestorePermissionError({
+            operation: 'list',
+            path,
+          });
+          errorEmitter.emit('permission-error', contextualError);
+        }
+
+        setError(finalError);
+        setData(null);
+        setIsLoading(false);
       }
     );
 
@@ -101,12 +108,12 @@ export function useCollection<T = any>(
 }
 
 /**
- * Specialized hook for MOA collections with Field Masking for Students.
+ * Specialized hook for MOA collections with Field Masking and Query Stabilization.
  */
 export function useMoaCollection<T = any>(
   memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean}) | null | undefined
 ): UseCollectionResult<T> {
-  const { user } = useAuth();
+  const { user } = useAuth(); // AuthContext is tied to profile
   const { data: rawData, isLoading, error } = useCollection<T>(memoizedTargetRefOrQuery);
 
   const maskedData = useMemo(() => {

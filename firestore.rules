@@ -8,13 +8,15 @@ service cloud.firestore {
     }
 
     // Helper: Check if user has an institutional email
+    // Temporary: Do not require email_verified as requested for testing
     function isInstitutional() {
       return isSignedIn() && request.auth.token.email.matches('.*@neu\\.edu\\.ph$');
     }
 
     // Helper: Check if user has a specific role in the centralized 'users' collection
     function hasRole(role) {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isSignedIn() && userDoc != null && userDoc.data.role == role;
     }
 
     match /users/{userId} {
@@ -26,7 +28,7 @@ service cloud.firestore {
 
     match /moas/{moaId} {
       // Point 4: allow all @neu.edu.ph users to list the moas collection
-      // Restricted to APPROVED records for students to maintain privacy
+      // Students restricted to APPROVED records
       allow list: if isSignedIn() && (
         hasRole('admin') || 
         hasRole('faculty') || 
@@ -48,13 +50,14 @@ service cloud.firestore {
         )
       );
 
-      // Point 4: strictly restricting write access to those with the 'admin' or 'faculty' role
+      // Writes restricted to admin or faculty
       allow create, update: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
       allow delete: if false; // Soft-delete only
     }
 
     match /audit_logs/{logId} {
       allow read: if isSignedIn() && hasRole('admin');
+      allow create: if isSignedIn();
     }
   }
 }
