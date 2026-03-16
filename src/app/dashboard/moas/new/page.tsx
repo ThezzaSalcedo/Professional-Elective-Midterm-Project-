@@ -1,17 +1,18 @@
+
 "use client"
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase } from '@/firebase';
-import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { classifyMoaIndustry } from '@/ai/flows/moa-industry-classifier';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
-import { MOAStatus, AuditLog } from '@/app/lib/types';
+import { MOAStatus, AuditEntry } from '@/app/lib/types';
 import { Loader2, Sparkles, ChevronLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -64,18 +65,17 @@ export default function NewMoaPage() {
     const moaId = Math.random().toString(36).substr(2, 9);
     const moaRef = doc(firestore, 'moas', moaId);
 
-    const auditEntry: AuditLog = {
-      id: Math.random().toString(36).substr(2, 9),
+    const auditEntry: AuditEntry = {
       userId: firebaseUser.uid,
       userName: user.name,
       timestamp: new Date().toISOString(),
-      operation: 'Insert'
+      operation: 'INSERT' // Uppercase audit operation
     };
 
     const finalData = {
       ...formData,
       id: moaId,
-      isSoftDeleted: false,
+      isDeleted: false,
       auditTrail: [auditEntry],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

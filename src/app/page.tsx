@@ -10,32 +10,34 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle, UserPlus, LogIn, LogOut, UserCircle } from 'lucide-react';
+import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function HomePage() {
   const { user, firebaseUser, isLoading: isAuthLoading, logout } = useAuth();
   const { auth, firestore } = useFirebase();
   const router = useRouter();
-  const { toast } = useToast();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setHasMounted(true);
-    if (user && !isAuthLoading) {
+  }, []);
+
+  // Landing page logic: Only redirect if profile is fully loaded and confirmed
+  useEffect(() => {
+    if (user && !isAuthLoading && hasMounted) {
       router.push('/dashboard');
     }
-  }, [user, isAuthLoading, router]);
+  }, [user, isAuthLoading, router, hasMounted]);
 
   const createProfile = async (uid: string, userEmail: string, name: string) => {
     const lowerEmail = userEmail.toLowerCase();
@@ -47,7 +49,8 @@ export default function HomePage() {
       roleName = 'faculty';
     }
 
-    await setDoc(doc(firestore, 'users', uid), {
+    const userRef = doc(firestore, 'users', uid);
+    await setDoc(userRef, {
       id: uid,
       email: userEmail,
       fullName: name,
@@ -121,10 +124,13 @@ export default function HomePage() {
     }
   };
 
-  if (!hasMounted || (isAuthLoading && !firebaseUser)) {
+  if (!hasMounted) return null;
+
+  if (isAuthLoading && !user && firebaseUser) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground font-medium">Verifying Account...</p>
       </div>
     );
   }
@@ -135,10 +141,14 @@ export default function HomePage() {
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
           <h2 className="text-2xl font-bold text-center mb-6">Complete Your Profile</h2>
           <form onSubmit={handleFinishProfile} className="space-y-4">
-            <Label>Full Name</Label>
-            <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            <Button className="w-full" disabled={isProcessing}>Finish Registration</Button>
-            <Button variant="ghost" className="w-full" onClick={logout}>Sign Out</Button>
+            <div className="space-y-2">
+              <Label>Full Name</Label>
+              <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter your full name" />
+            </div>
+            <Button className="w-full" disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Finish Registration"}
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={logout} type="button">Sign Out</Button>
           </form>
         </div>
       </div>
@@ -151,11 +161,12 @@ export default function HomePage() {
         <div className="text-center mb-8">
           <ShieldCheck className="w-12 h-12 text-primary mx-auto mb-4" />
           <h1 className="text-3xl font-bold">MOA Track</h1>
-          <p className="text-muted-foreground">NEU Partnership Monitoring System</p>
+          <p className="text-muted-foreground">Institutional Partnership Registry</p>
         </div>
 
         {errorMessage && (
           <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
@@ -168,23 +179,37 @@ export default function HomePage() {
 
           <TabsContent value="login">
             <form onSubmit={handleEmailLogin} className="space-y-4">
-              <Label htmlFor="email">Email (@neu.edu.ph)</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-              <Button type="submit" className="w-full" disabled={isProcessing}>Sign In</Button>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email (@neu.edu.ph)</Label>
+                <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@neu.edu.ph" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+              <Button type="submit" className="w-full" disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Sign In"}
+              </Button>
             </form>
           </TabsContent>
 
           <TabsContent value="signup">
             <form onSubmit={handleEmailSignUp} className="space-y-4">
-              <Label>Full Name</Label>
-              <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
-              <Label>Email (@neu.edu.ph)</Label>
-              <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-              <Label>Password</Label>
-              <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-              <Button type="submit" className="w-full" disabled={isProcessing}>Create Account</Button>
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full Name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Email (@neu.edu.ph)</Label>
+                <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@neu.edu.ph" />
+              </div>
+              <div className="space-y-2">
+                <Label>Password</Label>
+                <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+              <Button type="submit" className="w-full" disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Create Account"}
+              </Button>
             </form>
           </TabsContent>
         </Tabs>

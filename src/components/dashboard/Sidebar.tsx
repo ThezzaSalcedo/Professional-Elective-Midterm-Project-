@@ -1,3 +1,4 @@
+
 "use client"
 
 import React from 'react';
@@ -9,13 +10,10 @@ import {
   Users, 
   LogOut, 
   ShieldCheck,
-  Search,
-  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -26,7 +24,8 @@ export function Sidebar() {
     { label: 'MOA List', href: '/dashboard/moas', icon: FileText },
   ];
 
-  if (user?.role === 'Admin') {
+  // Using lowercase role checks to match standard
+  if (user?.role === 'admin') {
     navItems.push({ label: 'User Management', href: '/dashboard/admin/users', icon: Users });
   }
 
@@ -70,11 +69,11 @@ export function Sidebar() {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Logged in as</p>
           <div className="mt-1 flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">
-              {user?.name.charAt(0)}
+              {user?.name?.charAt(0) || 'U'}
             </div>
             <div className="overflow-hidden">
               <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.role}</p>
+              <p className="text-xs text-muted-foreground truncate capitalize">{user?.role}</p>
             </div>
           </div>
         </div>

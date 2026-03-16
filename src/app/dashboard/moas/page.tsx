@@ -3,12 +3,13 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirebase, useMoaCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { Search, Eye, History, RotateCcw, Trash2, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { MOA, AuditEntry } from '@/app/lib/types';
@@ -30,15 +31,19 @@ export default function MoaListPage() {
       return query(base, where('isDeleted', '==', false));
     }
     
-    return query(
-      base, 
-      where('isDeleted', '==', false),
-      where('status', '>=', 'APPROVED'),
-      where('status', '<', 'APPROVEE')
-    );
+    if (user.role === 'student') {
+      return query(
+        base, 
+        where('isDeleted', '==', false),
+        where('status', '>=', 'APPROVED'),
+        where('status', '<', 'APPROVEE')
+      );
+    }
+    
+    return null;
   }, [firestore, user]);
 
-  const { data: moas, isLoading } = useCollection<MOA>(moaQuery);
+  const { data: moas, isLoading } = useMoaCollection<MOA>(moaQuery);
 
   const filteredMoas = (moas || []).filter(m => 
     m.companyName.toLowerCase().includes(search.toLowerCase()) ||
@@ -129,11 +134,11 @@ export default function MoaListPage() {
                               <div><Label className="text-muted-foreground">Email</Label><div>{selectedMoa.contactEmail}</div></div>
                             </div>
                             
-                            {user?.role === 'admin' && (
+                            {user?.role === 'admin' && selectedMoa.auditTrail && (
                               <div className="border-t pt-4">
-                                <div className="flex items-center gap-2 font-bold mb-4"><History className="w-4 h-4" /> Audit History</div>
+                                <div className="flex items-center gap-2 font-bold mb-4"><History className="w-4 h-4" /> History</div>
                                 <div className="space-y-2 max-h-48 overflow-y-auto">
-                                  {selectedMoa.auditTrail?.map((a, i) => (
+                                  {selectedMoa.auditTrail.map((a, i) => (
                                     <div key={i} className="flex justify-between text-xs p-2 bg-muted/50 rounded border">
                                       <span>{a.userName}</span>
                                       <span className="font-bold">{a.operation}</span>
@@ -148,12 +153,12 @@ export default function MoaListPage() {
                       </DialogContent>
                     </Dialog>
 
-                    {user?.role !== 'student' && !m.isDeleted && (
-                      <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleSoftDelete(m.id)}><Trash2 className="w-4 h-4" /></Button>
+                    {(user?.role === 'admin' || user?.role === 'faculty') && !m.isDeleted && (
+                      <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleSoftDelete(m.id)} title="Soft Delete"><Trash2 className="w-4 h-4" /></Button>
                     )}
 
                     {user?.role === 'admin' && m.isDeleted && (
-                      <Button variant="ghost" size="icon" className="text-green-600 hover:bg-green-50" onClick={() => handleRecover(m.id)}><RotateCcw className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" className="text-green-600 hover:bg-green-50" onClick={() => handleRecover(m.id)} title="Recover Record"><RotateCcw className="w-4 h-4" /></Button>
                     )}
                   </div>
                 </td>

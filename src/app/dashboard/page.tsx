@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirebase, useMoaCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, setDoc } from 'firebase/firestore';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { 
@@ -12,10 +12,7 @@ import {
   AlertTriangle, 
   FileX2, 
   Search,
-  Plus,
   Loader2,
-  Database,
-  Sparkles
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -41,16 +38,20 @@ export default function DashboardPage() {
       return query(base, where('isDeleted', '==', false));
     }
     
-    // Students only see approved active
-    return query(
-      base, 
-      where('isDeleted', '==', false),
-      where('status', '>=', 'APPROVED'),
-      where('status', '<', 'APPROVEE')
-    );
+    // Students query: Must exactly match document-level security constraints
+    if (user.role === 'student') {
+      return query(
+        base, 
+        where('isDeleted', '==', false),
+        where('status', '>=', 'APPROVED'),
+        where('status', '<', 'APPROVEE')
+      );
+    }
+    
+    return null;
   }, [firestore, user]);
 
-  const { data: moas, isLoading } = useCollection<MOA>(moaQuery);
+  const { data: moas, isLoading } = useMoaCollection<MOA>(moaQuery);
 
   const visibleMoas = useMemo(() => {
     if (!moas) return [];
@@ -70,10 +71,10 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => {
     if (!moas) return [];
-    const active = moas.filter(m => !m.isDeleted && m.status.startsWith('APPROVED')).length;
-    const processing = moas.filter(m => !m.isDeleted && m.status.startsWith('PROCESSING')).length;
-    const expiring = moas.filter(m => !m.isDeleted && m.status === 'EXPIRING').length;
-    const expired = moas.filter(m => !m.isDeleted && m.status === 'EXPIRED').length;
+    const active = moas.filter(m => (m as any).status?.startsWith('APPROVED')).length;
+    const processing = moas.filter(m => (m as any).status?.startsWith('PROCESSING')).length;
+    const expiring = moas.filter(m => (m as any).status === 'EXPIRING').length;
+    const expired = moas.filter(m => (m as any).status === 'EXPIRED').length;
 
     return [
       { title: 'Active MOAs', value: active, icon: CheckCircle2, color: 'bg-green-500' },
