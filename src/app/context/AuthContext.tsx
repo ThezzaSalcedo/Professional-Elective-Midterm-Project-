@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, Role } from '../lib/types';
 import { useFirebase, useUser } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 type AuthContextType = {
   user: User | null;
@@ -22,50 +22,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   useEffect(() => {
-    async function fetchProfile() {
+    let unsubscribe: (() => void) | undefined;
+
+    async function setupProfileListener() {
       if (firebaseUser && firestore) {
         setIsLoadingProfile(true);
         
-        const roles: { collection: string; role: Role }[] = [
-          { collection: 'admins', role: 'Admin' },
-          { collection: 'faculty', role: 'Faculty' },
-          { collection: 'students', role: 'Student' }
-        ];
-
-        let foundProfile: User | null = null;
-
-        try {
-          for (const r of roles) {
-            const docRef = doc(firestore, r.collection, firebaseUser.uid);
-            const snap = await getDoc(docRef);
-            
-            if (snap.exists()) {
-              const data = snap.data();
-              foundProfile = {
-                id: firebaseUser.uid,
-                name: data.fullName || firebaseUser.displayName || 'User',
-                email: data.email || firebaseUser.email || '',
-                role: data.role as Role,
-                canEdit: !!data.canEditMoa || (data.role === 'Admin'),
-                isBlocked: data.isBlocked === true,
-              };
-              break;
-            }
-          }
-        } catch (error) {
-          console.error("AuthContext: Error fetching user profile:", error);
+        // Determine collection based on institutional email patterns
+        const lowerEmail = firebaseUser.email?.toLowerCase() || '';
+        let collectionName = 'students';
+        if (lowerEmail.includes('admin')) {
+          collectionName = 'admins';
+        } else if (lowerEmail.includes('faculty')) {
+          collectionName = 'faculty';
         }
+
+        const docRef = doc(firestore, collectionName, firebaseUser.uid);
         
-        setProfile(foundProfile);
+        // Use real-time listener for instant updates during registration
+        unsubscribe = onSnapshot(docRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            setProfile({
+              id: firebaseUser.uid,
+              name: data.fullName || firebaseUser.displayName || 'User',
+              email: data.email || firebaseUser.email || '',
+              role: data.role as Role,
+              canEdit: !!data.canEditMoa || (data.role === 'Admin'),
+              isBlocked: data.isBlocked === true,
+            });
+          } else {
+            setProfile(null);
+          }
+          setIsLoadingProfile(false);
+        }, (error) => {
+          console.error("AuthContext: Profile listener error:", error);
+          setIsLoadingProfile(false);
+        });
       } else {
         setProfile(null);
+        setIsLoadingProfile(false);
       }
-      setIsLoadingProfile(false);
     }
 
     if (!isUserLoading) {
-      fetchProfile();
+      setupProfileListener();
     }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [firebaseUser, isUserLoading, firestore]);
 
   const logout = () => {

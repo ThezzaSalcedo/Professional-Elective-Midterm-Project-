@@ -32,6 +32,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setHasMounted(true);
+    // If profile and auth are both ready, redirect to dashboard
     if (user && !isAuthLoading) {
       router.push('/dashboard');
     }
@@ -50,6 +51,7 @@ export default function HomePage() {
       roleName = 'Faculty';
     }
 
+    // This triggers the onSnapshot listener in AuthContext
     await setDoc(doc(firestore, collectionName, uid), {
       id: uid,
       email: userEmail,
@@ -70,14 +72,13 @@ export default function HomePage() {
     setIsProcessing(true);
     try {
       await initiateEmailSignIn(auth, email, password);
-      toast({ title: "Connecting...", description: "Verifying credentials" });
-      // We don't set isProcessing(false) here because useEffect will handle the redirect if successful
+      toast({ title: "Authenticating...", description: "Verifying your institutional credentials." });
     } catch (error: any) {
       setIsProcessing(false);
       let msg = "Invalid email or password.";
       if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
       if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
-      if (error.code === 'auth/invalid-credential') msg = "Incorrect credentials. Check email and password.";
+      if (error.code === 'auth/invalid-credential') msg = "Invalid credentials. Please check your email and password.";
       
       setErrorMessage(msg);
       toast({ title: "Login Failed", description: msg, variant: "destructive" });
@@ -104,7 +105,6 @@ export default function HomePage() {
       const cred = await initiateEmailSignUp(auth, email, password);
       await createProfile(cred.user.uid, email, fullName);
       toast({ title: "Account Created", description: `Welcome, ${fullName}!` });
-      // The redirect is handled by the useEffect watching 'user'
     } catch (error: any) {
       setIsProcessing(false);
       let msg = error.message || "Failed to create account.";
@@ -119,10 +119,11 @@ export default function HomePage() {
     e.preventDefault();
     if (!firebaseUser || !fullName) return;
     setIsProcessing(true);
+    setErrorMessage(null);
     try {
-      await createProfile(firebaseUser.uid, firebaseUser.email, fullName);
-      toast({ title: "Profile Set Up", description: "You can now access the dashboard." });
-      // Redirect handled by useEffect
+      await createProfile(firebaseUser.uid, firebaseUser.email!, fullName);
+      toast({ title: "Profile Set Up", description: "Your account is ready." });
+      // Redirect is handled by the useEffect watching 'user' in AuthContext
     } catch (err: any) {
       setIsProcessing(false);
       setErrorMessage("Failed to save profile. Please try again.");
@@ -134,15 +135,16 @@ export default function HomePage() {
     setErrorMessage(null);
     try {
       await initiateGoogleSignIn(auth);
-      // On successful popup close, we reset processing
-      setIsProcessing(false);
+      // Processing state will be reset by effects once auth state resolves
     } catch (error: any) {
       setIsProcessing(false);
-      setErrorMessage(error.message || "Could not connect to Google.");
+      if (error.code !== 'auth/popup-closed-by-user') {
+        setErrorMessage(error.message || "Could not connect to Google.");
+      }
     }
   };
 
-  // If the app is checking for existing auth/profile sessions
+  // Global loading state (Initial boot)
   if (!hasMounted || (isAuthLoading && !firebaseUser)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6]">
@@ -152,33 +154,36 @@ export default function HomePage() {
     );
   }
 
-  // If logged in with Google/Email but Firestore profile doesn't exist yet
+  // Profile Setup State (Authenticated but missing Firestore data)
   if (firebaseUser && !user && !isAuthLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
           <div className="text-center mb-6">
-            <UserCircle className="w-16 h-16 text-accent mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-primary">Finish Registration</h2>
+            <div className="bg-accent/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <UserCircle className="w-12 h-12 text-accent" />
+            </div>
+            <h2 className="text-2xl font-bold text-primary">Complete Your Profile</h2>
             <p className="text-muted-foreground text-sm mt-2">
-              We found your account ({firebaseUser.email}), but your profile data is missing.
+              Welcome! Please provide your full name to finish setting up your institutional account for <strong>{firebaseUser.email}</strong>.
             </p>
           </div>
           <form onSubmit={handleFinishProfile} className="space-y-4">
             <div className="space-y-2">
-              <Label>Your Full Name</Label>
+              <Label>Full Name</Label>
               <Input 
-                placeholder="Enter your name" 
+                placeholder="Juan Dela Cruz" 
                 required 
                 value={fullName} 
                 onChange={(e) => setFullName(e.target.value)} 
+                className="h-11"
               />
             </div>
-            <Button className="w-full bg-accent hover:bg-accent/90 h-11" disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Complete Profile"}
+            <Button className="w-full bg-accent hover:bg-accent/90 h-11 font-semibold" disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Finish Registration"}
             </Button>
-            <Button variant="ghost" className="w-full text-muted-foreground" onClick={logout} type="button">
-              <LogOut className="w-4 h-4 mr-2" /> Sign Out
+            <Button variant="ghost" className="w-full text-muted-foreground h-11" onClick={logout} type="button">
+              <LogOut className="w-4 h-4 mr-2" /> Cancel & Sign Out
             </Button>
           </form>
         </div>
@@ -186,12 +191,12 @@ export default function HomePage() {
     );
   }
 
-  // While waiting for profile fetch after successful firebase auth
+  // Intermediate state (Waiting for profile fetch after successful auth)
   if (firebaseUser && !user && isAuthLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6]">
         <Loader2 className="w-10 h-10 animate-spin text-accent mb-4" />
-        <p className="text-muted-foreground font-medium">Retrieving Profile...</p>
+        <p className="text-muted-foreground font-medium">Synchronizing Profile...</p>
       </div>
     );
   }
