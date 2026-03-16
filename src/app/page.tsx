@@ -6,20 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from './context/AuthContext';
 import { useFirebase } from '@/firebase';
 import { initiateEmailSignIn, initiateGoogleSignIn } from '@/firebase/non-blocking-login';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc } from 'firebase/firestore';
-import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, Eye, EyeOff, Beaker, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function HomePage() {
   const { user } = useAuth();
-  const { auth, firestore } = useFirebase();
+  const { auth } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
   
@@ -27,7 +24,6 @@ export default function HomePage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -51,7 +47,7 @@ export default function HomePage() {
       let msg = "Invalid email or password.";
       if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
       if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
-      if (error.code === 'auth/invalid-credential') msg = "Invalid credentials. Please double-check your input.";
+      if (error.code === 'auth/invalid-credential') msg = "Invalid credentials. Please check your email and password.";
       
       setErrorMessage(msg);
       toast({
@@ -76,47 +72,6 @@ export default function HomePage() {
         description: msg,
         variant: "destructive"
       });
-    }
-  };
-
-  const seedFacultyAccount = async () => {
-    if (!auth || !firestore) return;
-    setIsSeeding(true);
-    const facultyEmail = "faculty1@neu.edu.ph";
-    const facultyPass = "NeuFaculty123!";
-
-    try {
-      // Create Auth User
-      const userCredential = await createUserWithEmailAndPassword(auth, facultyEmail, facultyPass);
-      const uid = userCredential.user.uid;
-
-      // Create Firestore Profile using non-blocking utility
-      setDocumentNonBlocking(doc(firestore, 'faculty', uid), {
-        id: uid,
-        email: facultyEmail,
-        fullName: "Primary Faculty Admin",
-        role: "Faculty",
-        canAddMoa: true,
-        canEditMoa: true,
-        canDeleteMoa: true
-      }, { merge: true });
-
-      toast({
-        title: "Account Created",
-        description: `Account ${facultyEmail} is ready! You can now log in.`,
-      });
-      setEmail(facultyEmail);
-      setPassword(facultyPass);
-    } catch (error: any) {
-      if (error.code === 'auth/email-already-in-use') {
-        toast({ title: "Account Ready", description: "The faculty demo account is already registered." });
-        setEmail(facultyEmail);
-        setPassword(facultyPass);
-      } else {
-        toast({ title: "Seeding Failed", description: error.message, variant: "destructive" });
-      }
-    } finally {
-      setIsSeeding(false);
     }
   };
 
@@ -153,7 +108,6 @@ export default function HomePage() {
               onChange={(e) => setEmail(e.target.value)}
               className="h-11"
               disabled={isLoggingIn}
-              suppressHydrationWarning
             />
           </div>
           
@@ -169,7 +123,6 @@ export default function HomePage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-11 pr-10"
                 disabled={isLoggingIn}
-                suppressHydrationWarning
               />
               <button
                 type="button"
@@ -214,17 +167,7 @@ export default function HomePage() {
           Sign In with Google
         </Button>
 
-        <div className="mt-8 space-y-3">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="w-full text-xs gap-2 text-accent/80 hover:text-accent"
-            onClick={seedFacultyAccount}
-            disabled={isSeeding}
-          >
-            {isSeeding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Beaker className="w-3 h-3" />}
-            Development: Setup Faculty Demo Account
-          </Button>
+        <div className="mt-8">
           <p className="text-[10px] text-muted-foreground text-center">
             Institutional access only. Use your NEU credentials.
           </p>
