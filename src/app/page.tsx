@@ -126,7 +126,8 @@ export default function HomePage() {
 
   if (!hasMounted) return null;
 
-  if (isAuthLoading && !user && firebaseUser) {
+  // If loading the profile for a returning user, show a loader
+  if (isAuthLoading && firebaseUser) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
@@ -135,6 +136,7 @@ export default function HomePage() {
     );
   }
 
+  // If signed in but no profile exists, prompt to finish registration
   if (firebaseUser && !user && !isAuthLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">

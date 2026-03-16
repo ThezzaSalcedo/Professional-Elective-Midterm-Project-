@@ -2,43 +2,39 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper: Check if user is signed in
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isInstitutional() {
-      return isSignedIn() && request.auth.token.email.matches('.*@neu\\.edu\\.ph$');
-    }
-
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
+    // Helper: Check if user has a specific role in the centralized 'users' collection
     function hasRole(role) {
-      return isSignedIn() && getUserData().role == role;
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && (request.auth.uid == userId || hasRole('admin'));
+      allow read: if isSignedIn() && (request.auth.uid == userId || hasRole('admin'));
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update, delete: if hasRole('admin');
-      allow list: if hasRole('admin');
+      allow update: if hasRole('admin');
+      allow delete: if false;
     }
 
     match /moas/{moaId} {
-      // Institutional users can list/read approved MOAs
-      // For 'list' to work, students MUST provide the corresponding filters in their query
-      allow read, list: if isInstitutional() && (
+      // Students: Can only read if MOA is APPROVED (any variant) and not deleted
+      // The matches('APPROVED.*') handles 'APPROVED: Signed by President', etc.
+      allow read, list: if isSignedIn() && (
         hasRole('admin') || 
         hasRole('faculty') || 
-        (resource.data.isDeleted == false && resource.data.status >= 'APPROVED' && resource.data.status < 'APPROVEE')
+        (resource.data.status.matches('APPROVED.*') && resource.data.isDeleted == false)
       );
 
       // Maintenance restricted to Admin and Faculty
-      allow create: if isInstitutional() && (hasRole('admin') || hasRole('faculty'));
-      allow update: if isInstitutional() && (hasRole('admin') || hasRole('faculty'));
+      allow create: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
       
-      allow delete: if false; // Use soft delete (isDeleted: true)
+      // Update: Admin/Faculty for general edits, but specific checks can be added
+      allow update: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
+      
+      allow delete: if false; // Strict soft-delete only
     }
 
     match /audit_logs/{logId} {

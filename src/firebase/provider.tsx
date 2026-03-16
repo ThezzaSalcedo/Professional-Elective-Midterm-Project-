@@ -2,7 +2,7 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
 
@@ -75,7 +75,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
         if (firebaseUser) {
           setUserAuthState(prev => ({ ...prev, user: firebaseUser, isUserLoading: false, isProfileLoading: true }));
           
-          // Automated Role Initialization
+          // Automated Role Initialization and Guard
           const userRef = doc(firestore, 'users', firebaseUser.uid);
           try {
             const docSnap = await getDoc(userRef);
@@ -102,7 +102,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               }
             }
           } catch (err) {
-            console.error("FirebaseProvider: Profile sync error:", err);
+            console.error("FirebaseProvider: Profile initialization error:", err);
           } finally {
             setUserAuthState(prev => ({ ...prev, isProfileLoading: false }));
           }

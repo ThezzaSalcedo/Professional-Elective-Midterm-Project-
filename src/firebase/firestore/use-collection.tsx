@@ -36,7 +36,7 @@ export interface InternalQuery extends Query<DocumentData> {
 }
 
 /**
- * Standard useCollection hook with Auth Loading Guard.
+ * Standard useCollection hook with Auth/Profile Loading Guard.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
@@ -110,7 +110,7 @@ export function useMoaCollection<T = any>(
 
   const maskedData = useMemo(() => {
     if (!rawData) return null;
-    // Field Masking for Students: Strip sensitive audit and status metadata
+    // Field Masking for Students: Strip sensitive audit and deletion metadata
     if (user?.role === 'student') {
       return rawData.map(item => {
         const masked = { ...item };
