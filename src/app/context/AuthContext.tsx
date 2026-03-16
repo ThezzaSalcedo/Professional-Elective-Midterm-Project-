@@ -24,37 +24,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function fetchProfile() {
       if (firebaseUser && firestore) {
-        // Try to find the user in one of the three collections
-        const collections: Role[] = ['Admin', 'Faculty', 'Student'];
-        let found = false;
+        setIsLoadingProfile(true);
+        
+        // Check collections: admins, faculty, students
+        const roles: { collection: string; role: Role }[] = [
+          { collection: 'admins', role: 'Admin' },
+          { collection: 'faculty', role: 'Faculty' },
+          { collection: 'students', role: 'Student' }
+        ];
 
-        for (const role of collections) {
-          const path = role === 'Admin' ? 'admins' : role.toLowerCase() + (role === 'Faculty' ? '' : 's');
-          // Adjusting for our specific paths: admins, faculty, students
-          const actualPath = role === 'Admin' ? 'admins' : (role === 'Faculty' ? 'faculty' : 'students');
-          
-          const docRef = doc(firestore, actualPath, firebaseUser.uid);
+        let foundProfile: User | null = null;
+
+        for (const r of roles) {
+          const docRef = doc(firestore, r.collection, firebaseUser.uid);
           const snap = await getDoc(docRef);
           
           if (snap.exists()) {
             const data = snap.data();
-            setProfile({
+            foundProfile = {
               id: firebaseUser.uid,
               name: data.fullName || firebaseUser.displayName || 'User',
               email: data.email || firebaseUser.email || '',
               role: data.role as Role,
-              canEdit: data.canEditMoa || (data.role === 'Admin'),
-              isBlocked: data.isActive === false,
-            });
-            found = true;
+              canEdit: !!data.canEditMoa || (data.role === 'Admin'),
+              isBlocked: data.isBlocked === true,
+            };
             break;
           }
         }
         
-        if (!found) {
-          // Default profile if not found in collections (unlikely in prod)
-          setProfile(null);
-        }
+        setProfile(foundProfile);
       } else {
         setProfile(null);
       }
@@ -67,8 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [firebaseUser, isUserLoading, firestore]);
 
   const login = (email: string) => {
-    // In a real Firebase app, you'd use signInWithEmailAndPassword or GoogleAuthProvider
-    // For this MVP, we are assuming the login is handled by the page component
+    // Handled in page component via initiateEmailSignIn
   };
 
   const logout = () => {
