@@ -73,7 +73,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       auth,
       async (firebaseUser) => {
         if (firebaseUser) {
-          // Immediately set the auth user, keep profile loading as true
           setUserAuthState(prev => ({ ...prev, user: firebaseUser, isUserLoading: false, isProfileLoading: true }));
           
           const userRef = doc(firestore, 'users', firebaseUser.uid);
@@ -81,7 +80,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
             const docSnap = await getDoc(userRef);
             if (!docSnap.exists()) {
               const email = firebaseUser.email || '';
-              // Create default profile for institutional users immediately
+              // Point 1: Auto-Profile Creation for institutional users
               if (email.toLowerCase().endsWith('@neu.edu.ph')) {
                 let roleName = 'student';
                 const lowerEmail = email.toLowerCase();
@@ -93,9 +92,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                   email: email,
                   fullName: firebaseUser.displayName || 'Institutional User',
                   role: roleName,
-                  canAddMoa: roleName !== 'student',
-                  canEditMoa: roleName !== 'student',
-                  canDeleteMoa: roleName === 'admin',
                   isBlocked: false,
                   createdAt: new Date().toISOString()
                 });
@@ -104,7 +100,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
           } catch (err) {
             console.error("FirebaseProvider: Profile initialization error:", err);
           } finally {
-            // Once doc check/creation is done, profile is no longer loading
             setUserAuthState(prev => ({ ...prev, isProfileLoading: false }));
           }
         } else {

@@ -25,9 +25,9 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Read/List: Allowed for Admin/Faculty. 
-      // Students and all institutional users can read approved, non-deleted records.
-      allow read, list: if isSignedIn() && (
+      // Point 4: allow all @neu.edu.ph users to list the moas collection
+      // Restricted to APPROVED records for students to maintain privacy
+      allow list: if isSignedIn() && (
         hasRole('admin') || 
         hasRole('faculty') || 
         (
@@ -38,9 +38,18 @@ service cloud.firestore {
         )
       );
 
-      // Maintain: Admin and Faculty only
-      allow create: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
-      allow update: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
+      allow get: if isSignedIn() && (
+        hasRole('admin') || 
+        hasRole('faculty') || 
+        (
+          isInstitutional() &&
+          resource.data.isDeleted == false && 
+          resource.data.status >= 'APPROVED'
+        )
+      );
+
+      // Point 4: strictly restricting write access to those with the 'admin' or 'faculty' role
+      allow create, update: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
       allow delete: if false; // Soft-delete only
     }
 

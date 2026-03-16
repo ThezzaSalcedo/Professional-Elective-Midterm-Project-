@@ -36,12 +36,12 @@ export interface InternalQuery extends Query<DocumentData> {
 }
 
 /**
- * Standard useCollection hook with Auth/Profile Loading Guard.
+ * Point 2: Standard useCollection hook with Auth/Profile Loading Guard.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
 ): UseCollectionResult<T> {
-  const { isUserLoading, isProfileLoading } = useUser();
+  const { isUserLoading, isProfileLoading, user } = useUser();
   type ResultItemType = WithId<T>;
   type StateDataType = ResultItemType[] | null;
 
@@ -50,9 +50,9 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // GUARD: Only trigger if query is provided AND auth + profile are fully loaded
-    // This prevents "Missing or insufficient permissions" errors during initial mount.
-    if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading) {
+    // GUARD: The app must NOT attempt to fetch the collection until auth.currentUser 
+    // is defined and the user's document has been retrieved.
+    if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading || !user) {
       setData(null);
       setIsLoading(isUserLoading || isProfileLoading);
       setError(null);
@@ -92,7 +92,7 @@ export function useCollection<T = any>(
     );
 
     return () => unsubscribe();
-  }, [memoizedTargetRefOrQuery, isUserLoading, isProfileLoading]);
+  }, [memoizedTargetRefOrQuery, isUserLoading, isProfileLoading, user]);
 
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
@@ -111,7 +111,6 @@ export function useMoaCollection<T = any>(
 
   const maskedData = useMemo(() => {
     if (!rawData) return null;
-    // Field Masking for Students: Strip sensitive audit and deletion metadata
     if (user?.role === 'student') {
       return rawData.map(item => {
         const masked = { ...item };
