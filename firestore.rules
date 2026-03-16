@@ -7,6 +7,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Helper: Check if user has an institutional email
+    function isInstitutional() {
+      return isSignedIn() && request.auth.token.email.matches('.*@neu\\.edu\\.ph$');
+    }
+
     // Helper: Check if user has a specific role in the centralized 'users' collection
     function hasRole(role) {
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
@@ -21,18 +26,19 @@ service cloud.firestore {
 
     match /moas/{moaId} {
       // Read/List: Allowed for Admin/Faculty. 
-      // Students only if the document is APPROVED (using range comparison) and NOT DELETED.
+      // Students and all institutional users can read approved, non-deleted records.
       allow read, list: if isSignedIn() && (
         hasRole('admin') || 
         hasRole('faculty') || 
         (
+          isInstitutional() &&
           resource.data.isDeleted == false && 
           resource.data.status >= 'APPROVED' && 
           resource.data.status < 'APPROVEE'
         )
       );
 
-      // Maintain: Admin and Faculty
+      // Maintain: Admin and Faculty only
       allow create: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
       allow update: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
       allow delete: if false; // Soft-delete only

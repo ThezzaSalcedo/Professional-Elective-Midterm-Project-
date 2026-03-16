@@ -21,7 +21,7 @@ import { MOA, AuditEntry } from '../lib/types';
 import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
-  const { user, firebaseUser } = useAuth();
+  const { user, firebaseUser, isLoading: isAuthLoading } = useAuth();
   const { firestore } = useFirebase();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
@@ -31,15 +31,16 @@ export default function DashboardPage() {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
-    // Admin: Full access
+    // Admin: Full access to all records
     if (user.role === 'admin') return base;
     
-    // Faculty: View all non-deleted
+    // Faculty: View all non-deleted records
     if (user.role === 'faculty') {
       return query(base, where('isDeleted', '==', false));
     }
     
-    // Students: Must exactly match security rules constraints to avoid permission denial
+    // Students: Restricted to APPROVED and non-deleted
+    // This MUST exactly match the Firestore Security Rules range constraints
     if (user.role === 'student') {
       return query(
         base, 
@@ -52,7 +53,7 @@ export default function DashboardPage() {
     return null;
   }, [firestore, user]);
 
-  const { data: moas, isLoading } = useMoaCollection<MOA>(moaQuery);
+  const { data: moas, isLoading: isMoaLoading } = useMoaCollection<MOA>(moaQuery);
 
   const visibleMoas = useMemo(() => {
     if (!moas) return [];
@@ -142,7 +143,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (isLoading) {
+  if (isAuthLoading || isMoaLoading) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
         <Loader2 className="animate-spin h-10 w-10 text-primary" />

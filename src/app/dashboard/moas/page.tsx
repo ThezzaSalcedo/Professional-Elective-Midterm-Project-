@@ -33,6 +33,7 @@ export default function MoaListPage() {
     }
     
     // Students: Restricted to APPROVED and non-deleted
+    // This MUST exactly match the Firestore Security Rules range constraints
     if (user.role === 'student') {
       return query(
         base, 
