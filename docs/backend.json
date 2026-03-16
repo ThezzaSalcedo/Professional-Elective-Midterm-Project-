@@ -1,244 +1,104 @@
+
 {
   "entities": {
-    "User": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "User",
+    "AdminProfile": {
+      "title": "AdminProfile",
+      "description": "System administrator profile with full access rights.",
       "type": "object",
-      "description": "Represents a user of the MOA Tracking application with associated roles and permissions. Authentication is handled by an external Google SSO system.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the User entity, typically the User ID provided by the external Google SSO authentication system."
-        },
-        "email": {
-          "type": "string",
-          "description": "The institutional email address of the user, used for Google SSO and identification.",
-          "format": "email"
-        },
-        "fullName": {
-          "type": "string",
-          "description": "The full name of the user, typically obtained from their Google profile."
-        },
-        "role": {
-          "type": "string",
-          "description": "The role of the user in the system (e.g., 'Student', 'Faculty', or 'Admin'). This determines access levels."
-        },
-        "isActive": {
-          "type": "boolean",
-          "description": "A flag indicating if the user account is currently active (true) or blocked (false) by an Admin."
-        },
-        "canAddMoa": {
-          "type": "boolean",
-          "description": "Permission for Faculty users to create new MOA records. Default is false, configurable by an Admin."
-        },
-        "canEditMoa": {
-          "type": "boolean",
-          "description": "Permission for Faculty users to modify existing MOA records. Default is false, configurable by an Admin."
-        },
-        "canDeleteMoa": {
-          "type": "boolean",
-          "description": "Permission for Faculty users to soft-delete MOA records. Default is false, configurable by an Admin."
-        }
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin"] }
       },
-      "required": [
-        "id",
-        "email",
-        "fullName",
-        "role",
-        "isActive",
-        "canAddMoa",
-        "canEditMoa",
-        "canDeleteMoa"
-      ]
+      "required": ["id", "email", "fullName", "role"]
+    },
+    "FacultyProfile": {
+      "title": "FacultyProfile",
+      "description": "Faculty member profile with configurable MOA permissions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["Faculty"] },
+        "canAddMoa": { "type": "boolean" },
+        "canEditMoa": { "type": "boolean" },
+        "canDeleteMoa": { "type": "boolean" }
+      },
+      "required": ["id", "email", "fullName", "role", "canAddMoa", "canEditMoa", "canDeleteMoa"]
+    },
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "Student profile with read-only access to approved MOAs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["Student"] }
+      },
+      "required": ["id", "email", "fullName", "role"]
     },
     "Moa": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Moa",
+      "description": "A Memorandum of Agreement record.",
       "type": "object",
-      "description": "Represents a Memorandum of Agreement (MOA) entry, capturing all details, its lifecycle status, and soft-delete state.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Moa entity."
-        },
-        "hteId": {
-          "type": "string",
-          "description": "The Higher Education Institution ID (HTEID) associated with this MOA."
-        },
-        "companyName": {
-          "type": "string",
-          "description": "The full legal name of the company that is a party to the MOA."
-        },
-        "address": {
-          "type": "string",
-          "description": "The physical address of the company."
-        },
-        "contactPerson": {
-          "type": "string",
-          "description": "The name of the primary contact person at the company for this MOA."
-        },
-        "contactEmail": {
-          "type": "string",
-          "description": "The email address of the contact person at the company.",
-          "format": "email"
-        },
-        "industryType": {
-          "type": "string",
-          "description": "The type of industry the company operates in (e.g., Telecom, Food, Services, Technology, Finance). This field can be suggested by AI."
-        },
-        "effectiveDate": {
-          "type": "string",
-          "description": "The date when the MOA officially comes into effect.",
-          "format": "date-time"
-        },
-        "expirationDate": {
-          "type": "string",
-          "description": "The date when the MOA is set to expire.",
-          "format": "date-time"
-        },
-        "endorsedByCollege": {
-          "type": "string",
-          "description": "The name of the college within the university that endorsed or is responsible for this MOA."
-        },
-        "status": {
-          "type": "string",
-          "description": "The current lifecycle status of the MOA (e.g., APPROVED: Signed by President, PROCESSING: Awaiting signature of the MOA draft by HTE partner, EXPIRING, EXPIRED)."
-        },
-        "isSoftDeleted": {
-          "type": "boolean",
-          "description": "A flag indicating if the MOA record has been soft-deleted (true) or is active (false). Soft-deleted records are not permanently removed."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp indicating when this MOA record was first created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp indicating when this MOA record was last updated.",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "hteId": { "type": "string" },
+        "companyName": { "type": "string" },
+        "address": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "contactEmail": { "type": "string", "format": "email" },
+        "industryType": { "type": "string" },
+        "effectiveDate": { "type": "string", "format": "date-time" },
+        "college": { "type": "string" },
+        "status": { "type": "string" },
+        "isSoftDeleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "id",
-        "hteId",
-        "companyName",
-        "address",
-        "contactPerson",
-        "contactEmail",
-        "industryType",
-        "effectiveDate",
-        "expirationDate",
-        "endorsedByCollege",
-        "status",
-        "isSoftDeleted",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["id", "hteId", "companyName", "address", "contactPerson", "contactEmail", "industryType", "effectiveDate", "college", "status", "isSoftDeleted", "createdAt", "updatedAt"]
     },
     "MoaAuditLog": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "MoaAuditLog",
+      "description": "Historical log of MOA modifications.",
       "type": "object",
-      "description": "Maintains a strict audit trail of all modifications made to MOA records, including who performed the action, when, and what type of operation it was.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the MoaAuditLog entry."
-        },
-        "moaId": {
-          "type": "string",
-          "description": "Reference to the MOA entity that was modified or affected by this audit log entry. (Relationship: Moa 1:N MoaAuditLog)"
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to the User entity who performed the operation. (Relationship: User 1:N MoaAuditLog)"
-        },
-        "userName": {
-          "type": "string",
-          "description": "The name of the user who performed the operation, captured at the time of the event for historical accuracy."
-        },
-        "operationType": {
-          "type": "string",
-          "description": "The type of operation performed on the MOA record (e.g., 'Insert', 'Update', 'Soft-Delete', 'Recover')."
-        },
-        "operationDate": {
-          "type": "string",
-          "description": "Timestamp indicating when the operation occurred.",
-          "format": "date-time"
-        },
-        "details": {
-          "type": "string",
-          "description": "Optional field for storing specific details about the modification, such as specific fields that were changed or a brief description of the update."
-        }
+        "id": { "type": "string" },
+        "moaId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "operationType": { "type": "string" },
+        "operationDate": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "id",
-        "moaId",
-        "userId",
-        "userName",
-        "operationType",
-        "operationDate"
-      ]
+      "required": ["id", "moaId", "userId", "userName", "operationType", "operationDate"]
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password", "anonymous"]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Stores individual user profiles. Each document ID corresponds to the user's Firebase Authentication UID. Includes denormalized 'role' and explicit permissions ('canAddMoa', 'canEditMoa', 'canDeleteMoa') for authorization checks, enabling Authorization Independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user, matching their Firebase Authentication UID."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/moas/{moaId}",
-        "definition": {
-          "entityName": "Moa",
-          "schema": {
-            "$ref": "#/backend/entities/Moa"
-          },
-          "description": "Stores Memorandum of Agreement (MOA) records. Documents include 'status' and 'isSoftDeleted' fields, which are crucial for enforcing Role-Based Access Control and Query-Aware Permissions (QAPs) directly on the document data.",
-          "params": [
-            {
-              "name": "moaId",
-              "description": "The unique identifier for a Memorandum of Agreement record."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/moa_audit_logs/{logId}",
-        "definition": {
-          "entityName": "MoaAuditLog",
-          "schema": {
-            "$ref": "#/backend/entities/MoaAuditLog"
-          },
-          "description": "Contains an immutable audit trail of all modifications to MOA records. Access is restricted to Admin users only. This collection is structurally segregated to ensure a homogeneous security posture for audit data.",
-          "params": [
-            {
-              "name": "logId",
-              "description": "The unique identifier for an audit log entry."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "This Firestore structure is designed following the core principles of Authorization Independence, Structural Segregation, and clear Access Modeling to ensure security, scalability, and debuggability. The design prioritizes explicit state modeling and predictable schemas.\n\n**Authorization Independence:**\n1.  **User Roles and Permissions:** The `User` entity, stored in `/users/{userId}`, directly contains the user's `role` (Student, Faculty, Admin) and specific permissions (`canAddMoa`, `canEditMoa`, `canDeleteMoa`). Firestore security rules will authenticate the `request.auth.uid` and then retrieve *the current user's own `User` document* to check their role and permissions. This is a self-contained lookup for the authenticated user's profile, avoiding hierarchical dependencies or `get()` calls on unrelated documents for authorization, thus maintaining authorization independence.\n2.  **MOA Document Self-Sufficiency:** Each `Moa` document in `/moas/{moaId}` contains all necessary fields (`status`, `isSoftDeleted`) required for granular access control. This means rules evaluating access to an MOA document (e.g., for Students or Faculty) can do so by inspecting the `resource.data` of the MOA document itself (for `get` operations) or validating client-provided query parameters (for `list` operations). No `get()` calls to parent or related documents are required to determine who can access a specific MOA.\n\n**Support for Query-Aware Rules (QAPs):**\n1.  **Structural Segregation via Fields:** While all `Moa` documents reside in a single `/moas` collection, their `status` and `isSoftDeleted` fields effectively segregate them into different security postures logically. This design supports QAPs by enabling rules to enforce specific query constraints.\n2.  **Rule Enforcement of Client-Side Filters:**\n    *   **Students:** To satisfy the requirement that Students only see 'APPROVED' and non-deleted MOAs, Firestore security rules for `/moas` will mandate that any `list` operation initiated by a Student *must* include query filters for `status == 'APPROVED'` and `isSoftDeleted == false`. The rules will validate the presence and correctness of these query parameters, preventing Students from fetching unauthorized data even if they attempt to bypass client-side filtering. An example rule logic would check `request.query.get('status') == 'APPROVED'` and `request.query.get('isSoftDeleted') == false` in conjunction with the user's role.\n    *   **Faculty:** Similarly, for Faculty, the rules will require `list` operations to include a `isSoftDeleted == false` filter, ensuring they only see active MOAs. Their permissions for write operations (`canAddMoa`, `canEditMoa`, `canDeleteMoa`) are checked directly against their own `/users/{userId}` document.\n    *   **Admins:** Admins have full access to all `Moa` documents, including soft-deleted ones, without requiring specific query filters, thus simplifying their access patterns.\n\nThis architecture ensures that access is precisely controlled at the database level, preventing over-fetching of data and simplifying the security rule logic by aligning data structure with access patterns."
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/backend/entities/AdminProfile" },
+      "description": "Collection for administrative users."
+    },
+    "/faculty/{userId}": {
+      "schema": { "$ref": "#/backend/entities/FacultyProfile" },
+      "description": "Collection for faculty users."
+    },
+    "/students/{userId}": {
+      "schema": { "$ref": "#/backend/entities/StudentProfile" },
+      "description": "Collection for student users."
+    },
+    "/moas/{moaId}": {
+      "schema": { "$ref": "#/backend/entities/Moa" },
+      "description": "Repository of institutional partnerships."
+    },
+    "/moa_audit_logs/{logId}": {
+      "schema": { "$ref": "#/backend/entities/MoaAuditLog" },
+      "description": "Audit trails for compliance tracking."
+    }
   }
 }
