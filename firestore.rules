@@ -20,12 +20,16 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Read/List: Allowed for Admin/Faculty. Students only if APPROVED and NOT DELETED.
-      // For LIST operations, the query MUST contain filters for status and isDeleted.
+      // Read/List: Allowed for Admin/Faculty. 
+      // Students only if the document is APPROVED (using range comparison) and NOT DELETED.
       allow read, list: if isSignedIn() && (
         hasRole('admin') || 
         hasRole('faculty') || 
-        (resource.data.status >= 'APPROVED' && resource.data.status < 'APPROVEE' && resource.data.isDeleted == false)
+        (
+          resource.data.isDeleted == false && 
+          resource.data.status >= 'APPROVED' && 
+          resource.data.status < 'APPROVEE'
+        )
       );
 
       // Maintain: Admin and Faculty
