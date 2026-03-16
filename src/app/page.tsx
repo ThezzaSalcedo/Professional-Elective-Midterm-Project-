@@ -14,7 +14,7 @@ import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle, UserPlus, LogIn, LogOut
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 export default function HomePage() {
   const { user, firebaseUser, isLoading: isAuthLoading, logout } = useAuth();
@@ -32,7 +32,6 @@ export default function HomePage() {
 
   useEffect(() => {
     setHasMounted(true);
-    // If profile and auth are both ready, redirect to dashboard
     if (user && !isAuthLoading) {
       router.push('/dashboard');
     }
@@ -40,26 +39,23 @@ export default function HomePage() {
 
   const createProfile = async (uid: string, userEmail: string, name: string) => {
     const lowerEmail = userEmail.toLowerCase();
-    let collectionName = 'students';
-    let roleName: 'Admin' | 'Faculty' | 'Student' = 'Student';
+    let roleName: 'admin' | 'faculty' | 'student' = 'student';
 
     if (lowerEmail.includes('admin')) {
-      collectionName = 'admins';
-      roleName = 'Admin';
+      roleName = 'admin';
     } else if (lowerEmail.includes('faculty')) {
-      collectionName = 'faculty';
-      roleName = 'Faculty';
+      roleName = 'faculty';
     }
 
-    // This triggers the onSnapshot listener in AuthContext
-    await setDoc(doc(firestore, collectionName, uid), {
+    await setDoc(doc(firestore, 'users', uid), {
       id: uid,
       email: userEmail,
       fullName: name,
       role: roleName,
-      canAddMoa: roleName !== 'Student',
-      canEditMoa: roleName !== 'Student',
-      canDeleteMoa: roleName === 'Admin',
+      canAddMoa: roleName !== 'student',
+      canEditMoa: roleName !== 'student',
+      canDeleteMoa: roleName === 'admin',
+      isBlocked: false,
       createdAt: new Date().toISOString()
     });
   };
@@ -72,16 +68,12 @@ export default function HomePage() {
     setIsProcessing(true);
     try {
       await initiateEmailSignIn(auth, email, password);
-      toast({ title: "Authenticating...", description: "Verifying your institutional credentials." });
     } catch (error: any) {
       setIsProcessing(false);
       let msg = "Invalid email or password.";
       if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
       if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
-      if (error.code === 'auth/invalid-credential') msg = "Invalid credentials. Please check your email and password.";
-      
       setErrorMessage(msg);
-      toast({ title: "Login Failed", description: msg, variant: "destructive" });
     }
   };
 
@@ -95,23 +87,13 @@ export default function HomePage() {
       return;
     }
 
-    if (password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters.");
-      return;
-    }
-
     setIsProcessing(true);
     try {
       const cred = await initiateEmailSignUp(auth, email, password);
       await createProfile(cred.user.uid, email, fullName);
-      toast({ title: "Account Created", description: `Welcome, ${fullName}!` });
     } catch (error: any) {
       setIsProcessing(false);
-      let msg = error.message || "Failed to create account.";
-      if (error.code === 'auth/email-already-in-use') {
-        msg = "This email is already registered. Please sign in instead.";
-      }
-      setErrorMessage(msg);
+      setErrorMessage(error.message || "Failed to create account.");
     }
   };
 
@@ -119,23 +101,18 @@ export default function HomePage() {
     e.preventDefault();
     if (!firebaseUser || !fullName) return;
     setIsProcessing(true);
-    setErrorMessage(null);
     try {
       await createProfile(firebaseUser.uid, firebaseUser.email!, fullName);
-      toast({ title: "Profile Set Up", description: "Your account is ready." });
-      // Redirect is handled by the useEffect watching 'user' in AuthContext
     } catch (err: any) {
       setIsProcessing(false);
-      setErrorMessage("Failed to save profile. Please try again.");
+      setErrorMessage("Failed to save profile.");
     }
   };
 
   const handleGoogleLogin = async () => {
     setIsProcessing(true);
-    setErrorMessage(null);
     try {
       await initiateGoogleSignIn(auth);
-      // Processing state will be reset by effects once auth state resolves
     } catch (error: any) {
       setIsProcessing(false);
       if (error.code !== 'auth/popup-closed-by-user') {
@@ -144,212 +121,88 @@ export default function HomePage() {
     }
   };
 
-  // Global loading state (Initial boot)
   if (!hasMounted || (isAuthLoading && !firebaseUser)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6]">
-        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground font-medium animate-pulse">Initializing System...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
       </div>
     );
   }
 
-  // Profile Setup State (Authenticated but missing Firestore data)
   if (firebaseUser && !user && !isAuthLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
-          <div className="text-center mb-6">
-            <div className="bg-accent/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <UserCircle className="w-12 h-12 text-accent" />
-            </div>
-            <h2 className="text-2xl font-bold text-primary">Complete Your Profile</h2>
-            <p className="text-muted-foreground text-sm mt-2">
-              Welcome! Please provide your full name to finish setting up your institutional account for <strong>{firebaseUser.email}</strong>.
-            </p>
-          </div>
+          <h2 className="text-2xl font-bold text-center mb-6">Complete Your Profile</h2>
           <form onSubmit={handleFinishProfile} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Full Name</Label>
-              <Input 
-                placeholder="Juan Dela Cruz" 
-                required 
-                value={fullName} 
-                onChange={(e) => setFullName(e.target.value)} 
-                className="h-11"
-              />
-            </div>
-            <Button className="w-full bg-accent hover:bg-accent/90 h-11 font-semibold" disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Finish Registration"}
-            </Button>
-            <Button variant="ghost" className="w-full text-muted-foreground h-11" onClick={logout} type="button">
-              <LogOut className="w-4 h-4 mr-2" /> Cancel & Sign Out
-            </Button>
+            <Label>Full Name</Label>
+            <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Button className="w-full" disabled={isProcessing}>Finish Registration</Button>
+            <Button variant="ghost" className="w-full" onClick={logout}>Sign Out</Button>
           </form>
         </div>
       </div>
     );
   }
 
-  // Intermediate state (Waiting for profile fetch after successful auth)
-  if (firebaseUser && !user && isAuthLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6]">
-        <Loader2 className="w-10 h-10 animate-spin text-accent mb-4" />
-        <p className="text-muted-foreground font-medium">Synchronizing Profile...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-white mb-4 shadow-lg shadow-primary/20">
-            <ShieldCheck className="w-8 h-8" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">MOA Track</h1>
-          <p className="text-muted-foreground mt-2 font-medium">NEU Partnership Monitoring System</p>
+          <ShieldCheck className="w-12 h-12 text-primary mx-auto mb-4" />
+          <h1 className="text-3xl font-bold">MOA Track</h1>
+          <p className="text-muted-foreground">NEU Partnership Monitoring System</p>
         </div>
 
         {errorMessage && (
           <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>System Alert</AlertTitle>
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
 
         <Tabs defaultValue="login" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="login" className="gap-2">
-              <LogIn className="w-4 h-4" /> Sign In
-            </TabsTrigger>
-            <TabsTrigger value="signup" className="gap-2">
-              <UserPlus className="w-4 h-4" /> Register
-            </TabsTrigger>
+            <TabsTrigger value="login">Sign In</TabsTrigger>
+            <TabsTrigger value="signup">Register</TabsTrigger>
           </TabsList>
 
           <TabsContent value="login">
             <form onSubmit={handleEmailLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Institutional Email</Label>
-                <Input 
-                  id="email"
-                  type="email" 
-                  placeholder="name@neu.edu.ph" 
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-11"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="h-11 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <Button 
-                type="submit" 
-                className="w-full h-11 bg-primary hover:bg-primary/90 font-semibold"
-                disabled={isProcessing}
-              >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Sign In"}
-              </Button>
+              <Label htmlFor="email">Email (@neu.edu.ph)</Label>
+              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Button type="submit" className="w-full" disabled={isProcessing}>Sign In</Button>
             </form>
           </TabsContent>
 
           <TabsContent value="signup">
             <form onSubmit={handleEmailSignUp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="reg-name">Full Name</Label>
-                <Input 
-                  id="reg-name"
-                  placeholder="Enter your full name" 
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="h-11"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reg-email">Work/Student Email (@neu.edu.ph)</Label>
-                <Input 
-                  id="reg-email"
-                  type="email" 
-                  placeholder="name@neu.edu.ph" 
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-11"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reg-password">Password (min. 6 chars)</Label>
-                <Input
-                  id="reg-password"
-                  type="password"
-                  placeholder="••••••••"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11"
-                />
-              </div>
-              <Button 
-                type="submit" 
-                className="w-full h-11 bg-accent hover:bg-accent/90 text-white font-semibold"
-                disabled={isProcessing}
-              >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Create Account"}
-              </Button>
+              <Label>Full Name</Label>
+              <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              <Label>Email (@neu.edu.ph)</Label>
+              <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Label>Password</Label>
+              <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Button type="submit" className="w-full" disabled={isProcessing}>Create Account</Button>
             </form>
           </TabsContent>
         </Tabs>
 
         <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <Separator className="w-full" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-muted-foreground font-medium">Or continue with</span>
-          </div>
+          <Separator />
+          <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-muted-foreground">OR</span>
         </div>
 
-        <div className="grid grid-cols-1 gap-3">
-          <Button 
-            variant="outline" 
-            className="w-full h-11 gap-2 font-semibold" 
-            onClick={handleGoogleLogin}
-            disabled={isProcessing}
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            Institutional Google Account
-          </Button>
-        </div>
+        <Button variant="outline" className="w-full gap-2" onClick={handleGoogleLogin} disabled={isProcessing}>
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+          </svg>
+          Google Institutional Login
+        </Button>
       </div>
     </div>
   );

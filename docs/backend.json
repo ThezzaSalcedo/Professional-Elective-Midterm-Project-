@@ -1,42 +1,20 @@
 
 {
   "entities": {
-    "AdminProfile": {
-      "title": "AdminProfile",
-      "description": "System administrator profile with full access rights.",
+    "User": {
+      "title": "User",
+      "description": "Centralized user profile for Admin, Faculty, and Students.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "fullName": { "type": "string" },
-        "role": { "type": "string", "enum": ["Admin"] }
-      },
-      "required": ["id", "email", "fullName", "role"]
-    },
-    "FacultyProfile": {
-      "title": "FacultyProfile",
-      "description": "Faculty member profile with configurable MOA permissions.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "fullName": { "type": "string" },
-        "role": { "type": "string", "enum": ["Faculty"] },
+        "role": { "type": "string", "enum": ["admin", "faculty", "student"] },
         "canAddMoa": { "type": "boolean" },
         "canEditMoa": { "type": "boolean" },
-        "canDeleteMoa": { "type": "boolean" }
-      },
-      "required": ["id", "email", "fullName", "role", "canAddMoa", "canEditMoa", "canDeleteMoa"]
-    },
-    "StudentProfile": {
-      "title": "StudentProfile",
-      "description": "Student profile with read-only access to approved MOAs.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "fullName": { "type": "string" },
-        "role": { "type": "string", "enum": ["Student"] }
+        "canDeleteMoa": { "type": "boolean" },
+        "isBlocked": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "email", "fullName", "role"]
     },
@@ -55,50 +33,36 @@
         "effectiveDate": { "type": "string", "format": "date-time" },
         "college": { "type": "string" },
         "status": { "type": "string" },
-        "isSoftDeleted": { "type": "boolean" },
+        "isDeleted": { "type": "boolean" },
+        "auditTrail": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userId": { "type": "string" },
+              "userName": { "type": "string" },
+              "operation": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "hteId", "companyName", "address", "contactPerson", "contactEmail", "industryType", "effectiveDate", "college", "status", "isSoftDeleted", "createdAt", "updatedAt"]
-    },
-    "MoaAuditLog": {
-      "title": "MoaAuditLog",
-      "description": "Historical log of MOA modifications.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "moaId": { "type": "string" },
-        "userId": { "type": "string" },
-        "userName": { "type": "string" },
-        "operationType": { "type": "string" },
-        "operationDate": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "moaId", "userId", "userName", "operationType", "operationDate"]
+      "required": ["id", "hteId", "companyName", "address", "contactPerson", "contactEmail", "industryType", "effectiveDate", "college", "status", "isDeleted", "createdAt", "updatedAt"]
     }
   },
   "auth": {
-    "providers": ["password", "anonymous"]
+    "providers": ["password", "google.com"]
   },
   "firestore": {
-    "/admins/{userId}": {
-      "schema": { "$ref": "#/backend/entities/AdminProfile" },
-      "description": "Collection for administrative users."
-    },
-    "/faculty/{userId}": {
-      "schema": { "$ref": "#/backend/entities/FacultyProfile" },
-      "description": "Collection for faculty users."
-    },
-    "/students/{userId}": {
-      "schema": { "$ref": "#/backend/entities/StudentProfile" },
-      "description": "Collection for student users."
+    "/users/{userId}": {
+      "schema": { "$ref": "#/backend/entities/User" },
+      "description": "Centralized repository for all system users."
     },
     "/moas/{moaId}": {
       "schema": { "$ref": "#/backend/entities/Moa" },
-      "description": "Repository of institutional partnerships."
-    },
-    "/moa_audit_logs/{logId}": {
-      "schema": { "$ref": "#/backend/entities/MoaAuditLog" },
-      "description": "Audit trails for compliance tracking."
+      "description": "Institutional partnership records."
     }
   }
 }

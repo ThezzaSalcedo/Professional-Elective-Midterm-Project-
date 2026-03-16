@@ -1,4 +1,5 @@
-export type Role = 'Student' | 'Faculty' | 'Admin';
+
+export type Role = 'student' | 'faculty' | 'admin';
 
 export type MOAStatus =
   | 'APPROVED: Signed by President'
@@ -10,13 +11,11 @@ export type MOAStatus =
   | 'EXPIRING'
   | 'EXPIRED';
 
-export type AuditLog = {
-  id: string;
+export type AuditEntry = {
   userId: string;
   userName: string;
+  operation: 'INSERT' | 'EDIT' | 'SOFT-DELETE' | 'RECOVER';
   timestamp: string;
-  operation: 'Insert' | 'Edit' | 'Soft-Delete' | 'Recover';
-  details?: string;
 };
 
 export type MOA = {
@@ -30,8 +29,8 @@ export type MOA = {
   effectiveDate: string;
   college: string;
   status: MOAStatus;
-  isSoftDeleted: boolean;
-  auditTrail: AuditLog[];
+  isDeleted: boolean;
+  auditTrail: AuditEntry[];
   createdAt: string;
   updatedAt: string;
 };

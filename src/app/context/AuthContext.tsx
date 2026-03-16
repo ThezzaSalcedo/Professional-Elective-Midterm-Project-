@@ -27,19 +27,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function setupProfileListener() {
       if (firebaseUser && firestore) {
         setIsLoadingProfile(true);
+        const docRef = doc(firestore, 'users', firebaseUser.uid);
         
-        // Determine collection based on institutional email patterns
-        const lowerEmail = firebaseUser.email?.toLowerCase() || '';
-        let collectionName = 'students';
-        if (lowerEmail.includes('admin')) {
-          collectionName = 'admins';
-        } else if (lowerEmail.includes('faculty')) {
-          collectionName = 'faculty';
-        }
-
-        const docRef = doc(firestore, collectionName, firebaseUser.uid);
-        
-        // Use real-time listener for instant updates during registration
         unsubscribe = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
@@ -48,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               name: data.fullName || firebaseUser.displayName || 'User',
               email: data.email || firebaseUser.email || '',
               role: data.role as Role,
-              canEdit: !!data.canEditMoa || (data.role === 'Admin'),
+              canEdit: !!data.canEditMoa || (data.role === 'admin'),
               isBlocked: data.isBlocked === true,
             });
           } else {
@@ -56,7 +45,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setIsLoadingProfile(false);
         }, (error) => {
-          console.error("AuthContext: Profile listener error:", error);
           setIsLoadingProfile(false);
         });
       } else {
