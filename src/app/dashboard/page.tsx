@@ -12,7 +12,10 @@ import {
   FileX2, 
   Search,
   Filter,
-  Plus
+  Plus,
+  Download,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -44,7 +47,8 @@ export default function DashboardPage() {
         m.companyName.toLowerCase().includes(q) ||
         m.college.toLowerCase().includes(q) ||
         m.industryType.toLowerCase().includes(q) ||
-        m.contactPerson.toLowerCase().includes(q)
+        m.contactPerson.toLowerCase().includes(q) ||
+        m.address.toLowerCase().includes(q)
       );
     }
 
@@ -65,6 +69,133 @@ export default function DashboardPage() {
     ];
   }, [moas]);
 
+  // Student specific view matching the reference UI
+  if (user?.role === 'Student') {
+    return (
+      <div className="space-y-12 pb-20">
+        {/* Hero Section */}
+        <section className="text-center space-y-6 pt-10">
+          <h1 className="text-5xl font-extrabold tracking-tight text-slate-900">
+            Find your next <span className="text-primary">Internship Partner</span>
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium">
+            Explore our network of industry partners with active Memorandums of Agreement (MOA). Verified and approved for student placement.
+          </p>
+          
+          <div className="max-w-2xl mx-auto relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <Input 
+              placeholder="Search by company, industry, or location..." 
+              className="pl-12 h-14 bg-white border-slate-200 shadow-sm text-lg rounded-xl focus-visible:ring-primary"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </section>
+
+        {/* Partnerships List */}
+        <div className="space-y-6">
+          <div className="flex items-end justify-between border-b pb-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Approved Partnerships</h2>
+              <p className="text-sm text-muted-foreground">Showing all currently valid agreements</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="gap-2 rounded-lg border-slate-200">
+                <Filter className="w-4 h-4" />
+                Filter
+              </Button>
+              <Button variant="outline" size="sm" className="gap-2 rounded-lg border-slate-200">
+                <Plus className="w-4 h-4 rotate-45" />
+                Export
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-6 py-5 text-left font-bold text-slate-500 uppercase tracking-wider text-[11px]">Company Name</th>
+                    <th className="px-6 py-5 text-left font-bold text-slate-500 uppercase tracking-wider text-[11px]">Address</th>
+                    <th className="px-6 py-5 text-left font-bold text-slate-500 uppercase tracking-wider text-[11px]">Contact Person</th>
+                    <th className="px-6 py-5 text-left font-bold text-slate-500 uppercase tracking-wider text-[11px]">Email Address</th>
+                    <th className="px-6 py-5 text-right font-bold text-slate-500 uppercase tracking-wider text-[11px]">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {visibleMoas.map((m) => (
+                    <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-900">{m.companyName}</td>
+                      <td className="px-6 py-4 text-slate-600 max-w-xs truncate">{m.address}</td>
+                      <td className="px-6 py-4 text-slate-600">{m.contactPerson}</td>
+                      <td className="px-6 py-4">
+                        <a href={`mailto:${m.email}`} className="text-primary hover:underline font-medium">
+                          {m.email}
+                        </a>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 tracking-wide">
+                          Active
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {visibleMoas.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-20 text-center text-muted-foreground">
+                        <div className="flex flex-col items-center gap-2">
+                          <Search className="w-8 h-8 opacity-20" />
+                          <p className="font-medium italic">No internship partners found matching your search.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-center gap-4 pt-4">
+             <p className="text-sm text-muted-foreground mr-4">Showing <span className="font-bold text-slate-900">{Math.min(visibleMoas.length, 5)}</span> of <span className="font-bold text-slate-900">{visibleMoas.length}</span> results</p>
+             <div className="flex items-center gap-1">
+               <Button variant="outline" size="icon" className="h-9 w-9 border-slate-200">
+                 <ChevronLeft className="w-4 h-4" />
+               </Button>
+               <Button variant="default" className="h-9 w-9 px-0">1</Button>
+               <Button variant="ghost" className="h-9 w-9 px-0">2</Button>
+               <Button variant="ghost" className="h-9 w-9 px-0">3</Button>
+               <span className="px-2 text-muted-foreground">...</span>
+               <Button variant="ghost" className="h-9 w-9 px-0">9</Button>
+               <Button variant="outline" size="icon" className="h-9 w-9 border-slate-200">
+                 <ChevronRight className="w-4 h-4" />
+               </Button>
+             </div>
+          </div>
+        </div>
+
+        {/* Footer info matching reference style */}
+        <footer className="pt-20 border-t flex flex-col sm:flex-row items-center justify-between gap-6 text-sm text-slate-500">
+          <div className="flex items-center gap-2">
+             <div className="bg-primary/10 p-1.5 rounded-lg">
+                <CheckCircle2 className="w-5 h-5 text-primary" />
+             </div>
+             <span className="font-bold text-slate-900">NEU MOA Monitoring</span>
+          </div>
+          <nav className="flex gap-8 font-medium">
+            <Link href="#" className="hover:text-primary transition-colors">Privacy Policy</Link>
+            <Link href="#" className="hover:text-primary transition-colors">Terms of Service</Link>
+            <Link href="#" className="hover:text-primary transition-colors">Contact Support</Link>
+          </nav>
+          <p>© 2024 New Era University. All rights reserved.</p>
+        </footer>
+      </div>
+    );
+  }
+
+  // Admin/Faculty View
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
