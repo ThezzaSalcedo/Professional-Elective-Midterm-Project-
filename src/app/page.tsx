@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -16,8 +17,10 @@ export default function HomePage() {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
+    setHasMounted(true);
     if (user) {
       router.push('/dashboard');
     }
@@ -37,12 +40,9 @@ export default function HomePage() {
     }
 
     setIsLoggingIn(true);
-    // Simulate network delay for realistic feel
     setTimeout(() => {
       login(email);
       setIsLoggingIn(false);
-      // If login didn't redirect (e.g. user not in mock data), toast an error
-      // Note: In a real app, the login method would handle this response.
     }, 800);
   };
 
@@ -53,6 +53,24 @@ export default function HomePage() {
       setIsLoggingIn(false);
     }, 800);
   };
+
+  // Prevent hydration mismatch by only rendering the form after mounting
+  // This avoids issues with browser-injected attributes (like Edge's fdprocessedid)
+  if (!hasMounted) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-white/20 animate-pulse">
+          <div className="h-16 w-16 bg-muted rounded-2xl mx-auto mb-4" />
+          <div className="h-8 w-48 bg-muted rounded mx-auto mb-2" />
+          <div className="h-4 w-64 bg-muted rounded mx-auto mb-8" />
+          <div className="space-y-4">
+            <div className="h-10 bg-muted rounded w-full" />
+            <div className="h-10 bg-muted rounded w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
