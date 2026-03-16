@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -12,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { useUser } from '../provider';
 import { useAuth } from '@/app/context/AuthContext';
 
 /** Utility type to add an 'id' field to a given type T. */
@@ -19,15 +19,13 @@ export type WithId<T> = T & { id: string };
 
 /**
  * Interface for the return value of the useCollection hook.
- * @template T Type of the document data.
  */
 export interface UseCollectionResult<T> {
-  data: WithId<T>[] | null; // Document data with ID, or null.
-  isLoading: boolean;       // True if loading.
-  error: FirestoreError | Error | null; // Error object, or null.
+  data: WithId<T>[] | null;
+  isLoading: boolean;
+  error: FirestoreError | Error | null;
 }
 
-/* Internal implementation of Query */
 export interface InternalQuery extends Query<DocumentData> {
   _query: {
     path: {
@@ -38,11 +36,12 @@ export interface InternalQuery extends Query<DocumentData> {
 }
 
 /**
- * Standard useCollection hook.
+ * Standard useCollection hook with Auth Loading Guard.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
 ): UseCollectionResult<T> {
+  const { isUserLoading } = useUser();
   type ResultItemType = WithId<T>;
   type StateDataType = ResultItemType[] | null;
 
@@ -51,9 +50,10 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    if (!memoizedTargetRefOrQuery) {
+    // GUARD: Only trigger if query is provided AND auth is fully loaded
+    if (!memoizedTargetRefOrQuery || isUserLoading) {
       setData(null);
-      setIsLoading(false);
+      setIsLoading(isUserLoading);
       setError(null);
       return;
     }
@@ -91,7 +91,7 @@ export function useCollection<T = any>(
     );
 
     return () => unsubscribe();
-  }, [memoizedTargetRefOrQuery]);
+  }, [memoizedTargetRefOrQuery, isUserLoading]);
 
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
@@ -110,15 +110,16 @@ export function useMoaCollection<T = any>(
 
   const maskedData = useMemo(() => {
     if (!rawData) return null;
-    if (user?.role !== 'student') return rawData;
-
-    // Field Masking for Students: Remove auditTrail and isDeleted
-    return rawData.map(item => {
-      const masked = { ...item };
-      delete (masked as any).auditTrail;
-      delete (masked as any).isDeleted;
-      return masked;
-    });
+    // Field Masking for Students: Strip sensitive audit and status metadata
+    if (user?.role === 'student') {
+      return rawData.map(item => {
+        const masked = { ...item };
+        delete (masked as any).auditTrail;
+        delete (masked as any).isDeleted;
+        return masked;
+      });
+    }
+    return rawData;
   }, [rawData, user?.role]);
 
   return { data: maskedData, isLoading, error };

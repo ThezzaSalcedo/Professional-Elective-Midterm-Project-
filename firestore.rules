@@ -6,6 +6,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isInstitutionalEmail() {
+      return isSignedIn() && request.auth.token.email.matches('.*@neu\\.edu\\.ph$');
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
@@ -22,21 +26,18 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Students: Can only read if MOA is APPROVED and not deleted
-      allow read: if isSignedIn() && (
-        hasRole('admin') || 
-        hasRole('faculty') || 
-        (resource.data.status.matches('APPROVED.*') && resource.data.isDeleted == false)
-      );
+      // Institutional users can list/read approved MOAs
+      allow read, list: if isInstitutionalEmail();
 
-      // Admin & Faculty: Can maintain (Add/Edit/Soft-Delete)
-      allow write: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
+      // Maintenance restricted to Admin and Faculty
+      allow create, update: if isInstitutionalEmail() && (hasRole('admin') || hasRole('faculty'));
       
-      // Admin Only: Can recover deleted MOAs
-      allow update: if isSignedIn() && hasRole('admin');
+      // Explicit recovery logic for Admins
+      allow update: if isInstitutionalEmail() && hasRole('admin');
+      
+      allow delete: if false; // Use soft delete (isDeleted: true)
     }
 
-    // Audit Trail protection: Only Admin can read logs if split
     match /audit_logs/{logId} {
       allow read: if isSignedIn() && hasRole('admin');
     }
