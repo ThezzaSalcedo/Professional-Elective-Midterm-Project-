@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle, UserPlus, LogIn, LogOut, UserCircle, Wrench } from 'lucide-react';
+import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle, UserPlus, LogIn, LogOut, UserCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -60,34 +60,6 @@ export default function HomePage() {
       canDeleteMoa: roleName === 'Admin',
       createdAt: new Date().toISOString()
     });
-  };
-
-  const handleAdminSetup = async () => {
-    setIsProcessing(true);
-    setErrorMessage(null);
-    try {
-      const adminEmail = 'admin1@neu.edu.ph';
-      const adminPass = 'admin1';
-      
-      // Try to sign up, if fails because exists, just sign in
-      try {
-        const cred = await initiateEmailSignUp(auth, adminEmail, adminPass);
-        await createProfile(cred.user.uid, adminEmail, 'System Administrator');
-        toast({ title: "Admin Account Created", description: "Profile initialized in /admins collection." });
-      } catch (e: any) {
-        if (e.code === 'auth/email-already-in-use') {
-          await initiateEmailSignIn(auth, adminEmail, adminPass);
-          toast({ title: "Signed In", description: "Admin account already exists." });
-        } else {
-          throw e;
-        }
-      }
-      router.push('/dashboard');
-    } catch (error: any) {
-      setIsProcessing(false);
-      setErrorMessage("Admin Setup Failed: " + error.message);
-      toast({ title: "Setup Failed", description: error.message, variant: "destructive" });
-    }
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -331,21 +303,11 @@ export default function HomePage() {
             <Separator className="w-full" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-muted-foreground font-medium">Quick Access</span>
+            <span className="bg-white px-2 text-muted-foreground font-medium">Or continue with</span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3">
-          <Button 
-            variant="outline" 
-            className="w-full h-11 gap-2 border-dashed border-primary/50 text-primary hover:bg-primary/5" 
-            onClick={handleAdminSetup}
-            disabled={isProcessing}
-          >
-            <Wrench className="w-4 h-4" />
-            Initialize Admin Account (admin1)
-          </Button>
-          
           <Button 
             variant="outline" 
             className="w-full h-11 gap-2 font-semibold" 
