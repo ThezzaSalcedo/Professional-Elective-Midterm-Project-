@@ -25,7 +25,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (firebaseUser && firestore) {
         setIsLoadingProfile(true);
         
-        // Check collections: admins, faculty, students
         const roles: { collection: string; role: Role }[] = [
           { collection: 'admins', role: 'Admin' },
           { collection: 'faculty', role: 'Faculty' },
@@ -34,24 +33,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         let foundProfile: User | null = null;
 
-        for (const r of roles) {
-          const docRef = doc(firestore, r.collection, firebaseUser.uid);
-          const snap = await getDoc(docRef);
-          
-          if (snap.exists()) {
-            const data = snap.data();
-            foundProfile = {
-              id: firebaseUser.uid,
-              name: data.fullName || firebaseUser.displayName || 'User',
-              email: data.email || firebaseUser.email || '',
-              role: data.role as Role,
-              canEdit: !!data.canEditMoa || (data.role === 'Admin'),
-              isBlocked: data.isBlocked === true,
-            };
-            break;
+        try {
+          for (const r of roles) {
+            const docRef = doc(firestore, r.collection, firebaseUser.uid);
+            const snap = await getDoc(docRef);
+            
+            if (snap.exists()) {
+              const data = snap.data();
+              foundProfile = {
+                id: firebaseUser.uid,
+                name: data.fullName || firebaseUser.displayName || 'User',
+                email: data.email || firebaseUser.email || '',
+                role: data.role as Role,
+                canEdit: !!data.canEditMoa || (data.role === 'Admin'),
+                isBlocked: data.isBlocked === true,
+              };
+              break;
+            }
           }
+        } catch (error) {
+          console.error("AuthContext: Error fetching user profile:", error);
         }
         
+        // If still null, it means the user exists in Auth but not in Firestore collections
         setProfile(foundProfile);
       } else {
         setProfile(null);
@@ -66,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     auth?.signOut();
+    setProfile(null);
   };
 
   return (

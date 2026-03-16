@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { doc, setDoc } from 'firebase/firestore';
 
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const { auth, firestore } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
@@ -32,10 +32,10 @@ export default function HomePage() {
 
   useEffect(() => {
     setHasMounted(true);
-    if (user) {
+    if (user && !isAuthLoading) {
       router.push('/dashboard');
     }
-  }, [user, router]);
+  }, [user, isAuthLoading, router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,12 +45,13 @@ export default function HomePage() {
     setIsProcessing(true);
     try {
       await initiateEmailSignIn(auth, email, password);
+      toast({ title: "Welcome Back", description: "Signing you in..." });
     } catch (error: any) {
       setIsProcessing(false);
       let msg = "Invalid email or password.";
-      if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
-      if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
-      if (error.code === 'auth/invalid-credential') msg = "Invalid credentials. Please check your email and password.";
+      if (error.code === 'auth/user-not-found') msg = "No account found with this email. Please register first.";
+      if (error.code === 'auth/wrong-password') msg = "Incorrect password. Please try again.";
+      if (error.code === 'auth/invalid-credential') msg = "Incorrect email or password. Please verify your credentials.";
       
       setErrorMessage(msg);
       toast({
@@ -66,8 +67,8 @@ export default function HomePage() {
     setErrorMessage(null);
     if (!email || !password || !fullName) return;
 
-    if (!email.endsWith('@neu.edu.ph')) {
-      setErrorMessage("Please use your institutional (@neu.edu.ph) email.");
+    if (!email.toLowerCase().endsWith('@neu.edu.ph')) {
+      setErrorMessage("Institutional email (@neu.edu.ph) is required.");
       return;
     }
 
@@ -75,25 +76,39 @@ export default function HomePage() {
     try {
       const cred = await initiateEmailSignUp(auth, email, password);
       
-      // Default to Faculty for now as requested, or logic based on email
-      const role = email.includes('admin') ? 'admins' : email.includes('faculty') ? 'faculty' : 'students';
-      const roleName = role === 'admins' ? 'Admin' : role === 'faculty' ? 'Faculty' : 'Student';
+      // Determine collection based on email keywords
+      const lowerEmail = email.toLowerCase();
+      let collectionName = 'students';
+      let roleName: 'Admin' | 'Faculty' | 'Student' = 'Student';
 
-      await setDoc(doc(firestore, role, cred.user.uid), {
+      if (lowerEmail.includes('admin')) {
+        collectionName = 'admins';
+        roleName = 'Admin';
+      } else if (lowerEmail.includes('faculty')) {
+        collectionName = 'faculty';
+        roleName = 'Faculty';
+      }
+
+      // Create the profile document
+      await setDoc(doc(firestore, collectionName, cred.user.uid), {
         id: cred.user.uid,
         email: email,
         fullName: fullName,
         role: roleName,
-        canAddMoa: true,
-        canEditMoa: true,
-        canDeleteMoa: false,
+        canAddMoa: roleName !== 'Student',
+        canEditMoa: roleName !== 'Student',
+        canDeleteMoa: roleName === 'Admin',
         createdAt: new Date().toISOString()
       });
 
-      toast({ title: "Account Created", description: `Welcome to MOA Track, ${fullName}!` });
+      toast({ title: "Account Created", description: `Welcome, ${fullName}!` });
+      router.push('/dashboard');
     } catch (error: any) {
       setIsProcessing(false);
-      const msg = error.message || "Failed to create account.";
+      let msg = error.message || "Failed to create account.";
+      if (error.code === 'auth/email-already-in-use') {
+        msg = "This email is already registered. Please sign in instead.";
+      }
       setErrorMessage(msg);
     }
   };
@@ -125,13 +140,13 @@ export default function HomePage() {
             <ShieldCheck className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">MOA Track</h1>
-          <p className="text-muted-foreground mt-2 font-medium">Institutional Partnership Registry</p>
+          <p className="text-muted-foreground mt-2 font-medium">NEU Partnership Monitoring System</p>
         </div>
 
         {errorMessage && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
+            <AlertTitle>System Alert</AlertTitle>
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
@@ -190,7 +205,7 @@ export default function HomePage() {
                 className="w-full h-11 bg-primary hover:bg-primary/90 font-semibold"
                 disabled={isProcessing}
               >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Sign In"}
               </Button>
             </form>
           </TabsContent>
@@ -201,7 +216,7 @@ export default function HomePage() {
                 <Label htmlFor="reg-name">Full Name</Label>
                 <Input 
                   id="reg-name"
-                  placeholder="Juan Dela Cruz" 
+                  placeholder="Enter your full name" 
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -210,11 +225,11 @@ export default function HomePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="reg-email">Institutional Email</Label>
+                <Label htmlFor="reg-email">Work/Student Email</Label>
                 <Input 
                   id="reg-email"
                   type="email" 
-                  placeholder="faculty1@neu.edu.ph" 
+                  placeholder="e.g. faculty1@neu.edu.ph" 
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -227,7 +242,7 @@ export default function HomePage() {
                 <Input
                   id="reg-password"
                   type="password"
-                  placeholder="Create a password"
+                  placeholder="Minimum 6 characters"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -240,7 +255,7 @@ export default function HomePage() {
                 className="w-full h-11 bg-accent hover:bg-accent/90 text-white font-semibold"
                 disabled={isProcessing}
               >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Account"}
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Create Account"}
               </Button>
             </form>
           </TabsContent>
@@ -251,7 +266,7 @@ export default function HomePage() {
             <Separator className="w-full" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-muted-foreground font-medium">Or</span>
+            <span className="bg-white px-2 text-muted-foreground font-medium">Or continue with</span>
           </div>
         </div>
 
@@ -267,12 +282,12 @@ export default function HomePage() {
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
           </svg>
-          Google Sign In
+          Institutional Google Account
         </Button>
 
         <div className="mt-8">
           <p className="text-[10px] text-muted-foreground text-center">
-            Institutional access only. Use your NEU credentials.
+            Institutional access restricted to NEU domains.
           </p>
         </div>
       </div>
