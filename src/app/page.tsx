@@ -71,6 +71,7 @@ export default function HomePage() {
     try {
       await initiateEmailSignIn(auth, email, password);
       toast({ title: "Connecting...", description: "Verifying credentials" });
+      // We don't set isProcessing(false) here because useEffect will handle the redirect if successful
     } catch (error: any) {
       setIsProcessing(false);
       let msg = "Invalid email or password.";
@@ -103,7 +104,7 @@ export default function HomePage() {
       const cred = await initiateEmailSignUp(auth, email, password);
       await createProfile(cred.user.uid, email, fullName);
       toast({ title: "Account Created", description: `Welcome, ${fullName}!` });
-      router.push('/dashboard');
+      // The redirect is handled by the useEffect watching 'user'
     } catch (error: any) {
       setIsProcessing(false);
       let msg = error.message || "Failed to create account.";
@@ -121,7 +122,7 @@ export default function HomePage() {
     try {
       await createProfile(firebaseUser.uid, firebaseUser.email, fullName);
       toast({ title: "Profile Set Up", description: "You can now access the dashboard." });
-      router.push('/dashboard');
+      // Redirect handled by useEffect
     } catch (err: any) {
       setIsProcessing(false);
       setErrorMessage("Failed to save profile. Please try again.");
@@ -133,14 +134,25 @@ export default function HomePage() {
     setErrorMessage(null);
     try {
       await initiateGoogleSignIn(auth);
+      // On successful popup close, we reset processing
+      setIsProcessing(false);
     } catch (error: any) {
       setIsProcessing(false);
       setErrorMessage(error.message || "Could not connect to Google.");
     }
   };
 
-  if (!hasMounted) return null;
+  // If the app is checking for existing auth/profile sessions
+  if (!hasMounted || (isAuthLoading && !firebaseUser)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6]">
+        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground font-medium animate-pulse">Initializing System...</p>
+      </div>
+    );
+  }
 
+  // If logged in with Google/Email but Firestore profile doesn't exist yet
   if (firebaseUser && !user && !isAuthLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
@@ -162,7 +174,7 @@ export default function HomePage() {
                 onChange={(e) => setFullName(e.target.value)} 
               />
             </div>
-            <Button className="w-full bg-accent hover:bg-accent/90" disabled={isProcessing}>
+            <Button className="w-full bg-accent hover:bg-accent/90 h-11" disabled={isProcessing}>
               {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Complete Profile"}
             </Button>
             <Button variant="ghost" className="w-full text-muted-foreground" onClick={logout} type="button">
@@ -170,6 +182,16 @@ export default function HomePage() {
             </Button>
           </form>
         </div>
+      </div>
+    );
+  }
+
+  // While waiting for profile fetch after successful firebase auth
+  if (firebaseUser && !user && isAuthLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6]">
+        <Loader2 className="w-10 h-10 animate-spin text-accent mb-4" />
+        <p className="text-muted-foreground font-medium">Retrieving Profile...</p>
       </div>
     );
   }
@@ -210,7 +232,7 @@ export default function HomePage() {
                 <Input 
                   id="email"
                   type="email" 
-                  placeholder="admin1@neu.edu.ph" 
+                  placeholder="name@neu.edu.ph" 
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -268,7 +290,7 @@ export default function HomePage() {
                 <Input 
                   id="reg-email"
                   type="email" 
-                  placeholder="admin1@neu.edu.ph" 
+                  placeholder="name@neu.edu.ph" 
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
