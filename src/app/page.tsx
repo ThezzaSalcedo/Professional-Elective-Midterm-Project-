@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -81,8 +82,8 @@ export default function HomePage() {
   const seedFacultyAccount = async () => {
     if (!auth || !firestore) return;
     setIsSeeding(true);
-    const facultyEmail = "Faculty1.@neu.edu.ph";
-    const facultyPass = "faculty1";
+    const facultyEmail = "faculty1@neu.edu.ph";
+    const facultyPass = "NeuFaculty123!";
 
     try {
       // Create Auth User

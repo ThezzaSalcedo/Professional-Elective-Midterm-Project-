@@ -25,17 +25,20 @@ service cloud.firestore {
 
     match /admins/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
       allow list: if isAdmin();
     }
 
     match /faculty/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
       allow list: if isAdmin();
       allow update: if isAdmin();
     }
 
     match /students/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
       allow list: if isAdmin();
     }
 
