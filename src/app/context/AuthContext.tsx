@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -36,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: firebaseUser.uid,
               name: data.fullName || firebaseUser.displayName || 'User',
               email: data.email || firebaseUser.email || '',
-              role: data.role as Role,
+              role: (data.role as string).toLowerCase() as Role,
               canEdit: !!data.canEditMoa || (data.role === 'admin'),
               isBlocked: data.isBlocked === true,
             });

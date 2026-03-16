@@ -84,8 +84,9 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               
               if (isInstitutional) {
                 let roleName = 'student';
-                if (email.toLowerCase().includes('admin')) roleName = 'admin';
-                else if (email.toLowerCase().includes('faculty')) roleName = 'faculty';
+                const lowerEmail = email.toLowerCase();
+                if (lowerEmail.includes('admin')) roleName = 'admin';
+                else if (lowerEmail.includes('faculty')) roleName = 'faculty';
 
                 await setDoc(userRef, {
                   id: firebaseUser.uid,

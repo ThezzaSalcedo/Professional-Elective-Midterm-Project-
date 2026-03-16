@@ -25,7 +25,7 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     // Check if current user is admin
-    if (currentUser?.role !== 'Admin') return;
+    if (currentUser?.role !== 'admin') return;
     
     const stored = localStorage.getItem('moa_user_list');
     if (stored) {
@@ -65,7 +65,7 @@ export default function UserManagementPage() {
     updateUsers(updated);
   };
 
-  if (currentUser?.role !== 'Admin') {
+  if (currentUser?.role !== 'admin') {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
         <ShieldCheck className="w-16 h-16 text-muted-foreground opacity-20 mb-4" />
@@ -109,14 +109,14 @@ export default function UserManagementPage() {
                 <td className="px-6 py-4">
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    u.role === 'Admin' ? "bg-red-100 text-red-700" :
-                    u.role === 'Faculty' ? "bg-blue-100 text-blue-700" : "bg-muted text-foreground"
+                    u.role === 'admin' ? "bg-red-100 text-red-700" :
+                    u.role === 'faculty' ? "bg-blue-100 text-blue-700" : "bg-muted text-foreground"
                   )}>
                     {u.role}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-center">
-                  {u.role === 'Faculty' ? (
+                  {u.role === 'faculty' ? (
                     <div className="flex justify-center">
                       <Switch 
                         checked={u.canEdit} 
@@ -124,7 +124,7 @@ export default function UserManagementPage() {
                         disabled={u.isBlocked}
                       />
                     </div>
-                  ) : u.role === 'Admin' ? (
+                  ) : u.role === 'admin' ? (
                     <span className="text-green-600 font-bold text-[10px] uppercase">Always Enabled</span>
                   ) : (
                     <span className="text-muted-foreground italic text-xs">View Only</span>
