@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
+    
     // Helper: Check if user is signed in
     function isSignedIn() {
       return request.auth != null;
@@ -20,21 +20,18 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Students: Can only read if MOA is APPROVED (any variant) and not deleted
-      // The matches('APPROVED.*') handles 'APPROVED: Signed by President', etc.
+      // Read/List: Allowed for Admin/Faculty. Students only if APPROVED and NOT DELETED.
+      // For LIST operations, the query MUST contain filters for status and isDeleted.
       allow read, list: if isSignedIn() && (
         hasRole('admin') || 
         hasRole('faculty') || 
         (resource.data.status.matches('APPROVED.*') && resource.data.isDeleted == false)
       );
 
-      // Maintenance restricted to Admin and Faculty
+      // Maintain: Admin and Faculty
       allow create: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
-      
-      // Update: Admin/Faculty for general edits, but specific checks can be added
       allow update: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
-      
-      allow delete: if false; // Strict soft-delete only
+      allow delete: if false; // Soft-delete only
     }
 
     match /audit_logs/{logId} {

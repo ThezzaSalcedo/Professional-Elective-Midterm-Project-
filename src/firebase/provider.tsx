@@ -75,7 +75,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
         if (firebaseUser) {
           setUserAuthState(prev => ({ ...prev, user: firebaseUser, isUserLoading: false, isProfileLoading: true }));
           
-          // Automated Role Initialization and Guard
           const userRef = doc(firestore, 'users', firebaseUser.uid);
           try {
             const docSnap = await getDoc(userRef);

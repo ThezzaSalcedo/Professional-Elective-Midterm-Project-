@@ -31,13 +31,15 @@ export default function DashboardPage() {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
+    // Admin: Full access
     if (user.role === 'admin') return base;
     
+    // Faculty: View all non-deleted
     if (user.role === 'faculty') {
       return query(base, where('isDeleted', '==', false));
     }
     
-    // Students query: Must exactly match document-level security constraints
+    // Students: Must exactly match security rules constraints to avoid permission denial
     if (user.role === 'student') {
       return query(
         base, 
@@ -70,10 +72,10 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => {
     if (!moas) return [];
-    const active = moas.filter(m => (m as any).status?.startsWith('APPROVED')).length;
-    const processing = moas.filter(m => (m as any).status?.startsWith('PROCESSING')).length;
-    const expiring = moas.filter(m => (m as any).status === 'EXPIRING').length;
-    const expired = moas.filter(m => (m as any).status === 'EXPIRED').length;
+    const active = moas.filter(m => m.status?.startsWith('APPROVED')).length;
+    const processing = moas.filter(m => m.status?.startsWith('PROCESSING')).length;
+    const expiring = moas.filter(m => m.status === 'EXPIRING').length;
+    const expired = moas.filter(m => m.status === 'EXPIRED').length;
 
     return [
       { title: 'Active MOAs', value: active, icon: CheckCircle2, color: 'bg-green-500' },
@@ -141,11 +143,16 @@ export default function DashboardPage() {
   };
 
   if (isLoading) {
-    return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+    return (
+      <div className="h-full flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="animate-spin h-10 w-10 text-primary" />
+        <p className="text-muted-foreground animate-pulse">Synchronizing MOA Registry...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <div className="flex gap-3">
@@ -182,8 +189,8 @@ export default function DashboardPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {visibleMoas.map(m => (
-              <tr key={m.id}>
+            {visibleMoas.length > 0 ? visibleMoas.map(m => (
+              <tr key={m.id} className="hover:bg-muted/5 transition-colors">
                 <td className="px-6 py-4 font-medium">{m.companyName}</td>
                 <td className="px-6 py-4">{m.college}</td>
                 <td className="px-6 py-4">{m.industryType}</td>
@@ -196,7 +203,13 @@ export default function DashboardPage() {
                   </span>
                 </td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">
+                  No agreements found matching your criteria.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

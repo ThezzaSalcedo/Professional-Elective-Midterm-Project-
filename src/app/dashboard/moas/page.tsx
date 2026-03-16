@@ -24,12 +24,15 @@ export default function MoaListPage() {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
+    // Admin: Full access to all records
     if (user.role === 'admin') return base;
     
+    // Faculty: View all non-deleted records
     if (user.role === 'faculty') {
       return query(base, where('isDeleted', '==', false));
     }
     
+    // Students: Restricted to APPROVED and non-deleted
     if (user.role === 'student') {
       return query(
         base, 
@@ -58,7 +61,7 @@ export default function MoaListPage() {
       operation: 'SOFT-DELETE',
       timestamp: new Date().toISOString()
     };
-    await updateDoc(ref, { isDeleted: true, auditTrail: arrayUnion(audit) });
+    updateDoc(ref, { isDeleted: true, auditTrail: arrayUnion(audit) });
     toast({ title: "Record moved to trash" });
   };
 
@@ -71,14 +74,21 @@ export default function MoaListPage() {
       operation: 'RECOVER',
       timestamp: new Date().toISOString()
     };
-    await updateDoc(ref, { isDeleted: false, auditTrail: arrayUnion(audit) });
+    updateDoc(ref, { isDeleted: false, auditTrail: arrayUnion(audit) });
     toast({ title: "Record recovered" });
   };
 
-  if (isLoading) return <div className="py-20 flex justify-center"><Loader2 className="animate-spin" /></div>;
+  if (isLoading) {
+    return (
+      <div className="py-20 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="animate-spin text-primary h-8 w-8" />
+        <p className="text-sm text-muted-foreground">Accessing partnership records...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Partnership Registry</h1>
         <div className="relative w-80">
@@ -98,8 +108,8 @@ export default function MoaListPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {filteredMoas.map(m => (
-              <tr key={m.id} className={cn(m.isDeleted && "bg-muted/30 opacity-60")}>
+            {filteredMoas.length > 0 ? filteredMoas.map(m => (
+              <tr key={m.id} className={cn("hover:bg-muted/5 transition-colors", m.isDeleted && "bg-muted/30 opacity-60")}>
                 <td className="px-6 py-4">
                   <div className="font-bold">{m.companyName}</div>
                   <div className="text-xs text-muted-foreground">{m.hteId}</div>
@@ -126,22 +136,31 @@ export default function MoaListPage() {
                         {selectedMoa && (
                           <div className="space-y-6 pt-4">
                             <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div><Label className="text-muted-foreground">HTE ID</Label><div>{selectedMoa.hteId}</div></div>
-                              <div><Label className="text-muted-foreground">Effective Date</Label><div>{selectedMoa.effectiveDate}</div></div>
-                              <div className="col-span-2"><Label className="text-muted-foreground">Address</Label><div>{selectedMoa.address}</div></div>
-                              <div><Label className="text-muted-foreground">Contact</Label><div>{selectedMoa.contactPerson}</div></div>
-                              <div><Label className="text-muted-foreground">Email</Label><div>{selectedMoa.contactEmail}</div></div>
+                              <div><Label className="text-muted-foreground">HTE ID</Label><div className="font-medium">{selectedMoa.hteId}</div></div>
+                              <div><Label className="text-muted-foreground">Effective Date</Label><div className="font-medium">{selectedMoa.effectiveDate}</div></div>
+                              <div className="col-span-2"><Label className="text-muted-foreground">Address</Label><div className="font-medium">{selectedMoa.address}</div></div>
+                              <div><Label className="text-muted-foreground">Contact</Label><div className="font-medium">{selectedMoa.contactPerson}</div></div>
+                              <div><Label className="text-muted-foreground">Email</Label><div className="font-medium">{selectedMoa.contactEmail}</div></div>
                             </div>
                             
                             {user?.role === 'admin' && selectedMoa.auditTrail && (
                               <div className="border-t pt-4">
-                                <div className="flex items-center gap-2 font-bold mb-4"><History className="w-4 h-4" /> History</div>
-                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                <div className="flex items-center gap-2 font-bold mb-4 text-primary"><History className="w-4 h-4" /> Modification History</div>
+                                <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                                   {selectedMoa.auditTrail.map((a, i) => (
-                                    <div key={i} className="flex justify-between text-xs p-2 bg-muted/50 rounded border">
-                                      <span>{a.userName}</span>
-                                      <span className="font-bold">{a.operation}</span>
-                                      <span className="text-muted-foreground italic">{new Date(a.timestamp).toLocaleString()}</span>
+                                    <div key={i} className="flex justify-between items-center text-xs p-2 bg-muted/50 rounded border border-border/50">
+                                      <div className="flex flex-col">
+                                        <span className="font-semibold">{a.userName}</span>
+                                        <span className="text-[10px] text-muted-foreground italic">{new Date(a.timestamp).toLocaleString()}</span>
+                                      </div>
+                                      <span className={cn(
+                                        "px-1.5 py-0.5 rounded font-bold text-[9px]",
+                                        a.operation === 'INSERT' ? "bg-green-100 text-green-700" :
+                                        a.operation === 'EDIT' ? "bg-blue-100 text-blue-700" :
+                                        "bg-red-100 text-red-700"
+                                      )}>
+                                        {a.operation}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -162,7 +181,13 @@ export default function MoaListPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic">
+                  No records found.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

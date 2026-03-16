@@ -51,6 +51,7 @@ export function useCollection<T = any>(
 
   useEffect(() => {
     // GUARD: Only trigger if query is provided AND auth + profile are fully loaded
+    // This prevents "Missing or insufficient permissions" errors during initial mount.
     if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading) {
       setData(null);
       setIsLoading(isUserLoading || isProfileLoading);
