@@ -8,7 +8,6 @@ import { doc, getDoc } from 'firebase/firestore';
 
 type AuthContextType = {
   user: User | null;
-  login: (email: string) => void;
   logout: () => void;
   isLoading: boolean;
 };
@@ -65,16 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [firebaseUser, isUserLoading, firestore]);
 
-  const login = (email: string) => {
-    // Handled in page component via initiateEmailSignIn
-  };
-
   const logout = () => {
     auth?.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user: profile, login, logout, isLoading: isUserLoading || isLoadingProfile }}>
+    <AuthContext.Provider value={{ user: profile, logout, isLoading: isUserLoading || isLoadingProfile }}>
       {children}
     </AuthContext.Provider>
   );

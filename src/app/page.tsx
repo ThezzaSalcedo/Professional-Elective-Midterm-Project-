@@ -5,25 +5,28 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './context/AuthContext';
 import { useFirebase } from '@/firebase';
-import { initiateEmailSignIn, initiateGoogleSignIn } from '@/firebase/non-blocking-login';
+import { initiateEmailSignIn, initiateEmailSignUp, initiateGoogleSignIn } from '@/firebase/non-blocking-login';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle, UserPlus, LogIn } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function HomePage() {
   const { user } = useAuth();
-  const { auth } = useFirebase();
+  const { auth, firestore } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -39,11 +42,11 @@ export default function HomePage() {
     setErrorMessage(null);
     if (!email || !password) return;
     
-    setIsLoggingIn(true);
+    setIsProcessing(true);
     try {
       await initiateEmailSignIn(auth, email, password);
     } catch (error: any) {
-      setIsLoggingIn(false);
+      setIsProcessing(false);
       let msg = "Invalid email or password.";
       if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
       if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
@@ -58,13 +61,50 @@ export default function HomePage() {
     }
   };
 
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    if (!email || !password || !fullName) return;
+
+    if (!email.endsWith('@neu.edu.ph')) {
+      setErrorMessage("Please use your institutional (@neu.edu.ph) email.");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const cred = await initiateEmailSignUp(auth, email, password);
+      
+      // Default to Faculty for now as requested, or logic based on email
+      const role = email.includes('admin') ? 'admins' : email.includes('faculty') ? 'faculty' : 'students';
+      const roleName = role === 'admins' ? 'Admin' : role === 'faculty' ? 'Faculty' : 'Student';
+
+      await setDoc(doc(firestore, role, cred.user.uid), {
+        id: cred.user.uid,
+        email: email,
+        fullName: fullName,
+        role: roleName,
+        canAddMoa: true,
+        canEditMoa: true,
+        canDeleteMoa: false,
+        createdAt: new Date().toISOString()
+      });
+
+      toast({ title: "Account Created", description: `Welcome to MOA Track, ${fullName}!` });
+    } catch (error: any) {
+      setIsProcessing(false);
+      const msg = error.message || "Failed to create account.";
+      setErrorMessage(msg);
+    }
+  };
+
   const handleGoogleLogin = async () => {
-    setIsLoggingIn(true);
+    setIsProcessing(true);
     setErrorMessage(null);
     try {
       await initiateGoogleSignIn(auth);
     } catch (error: any) {
-      setIsLoggingIn(false);
+      setIsProcessing(false);
       const msg = error.message || "Could not connect to Google.";
       setErrorMessage(msg);
       toast({
@@ -85,7 +125,7 @@ export default function HomePage() {
             <ShieldCheck className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">MOA Track</h1>
-          <p className="text-muted-foreground mt-2 font-medium">NEU MOA Monitoring System</p>
+          <p className="text-muted-foreground mt-2 font-medium">Institutional Partnership Registry</p>
         </div>
 
         {errorMessage && (
@@ -96,59 +136,122 @@ export default function HomePage() {
           </Alert>
         )}
 
-        <form onSubmit={handleEmailLogin} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm font-semibold">Institutional Email</Label>
-            <Input 
-              id="email"
-              type="email" 
-              placeholder="name@neu.edu.ph" 
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-11"
-              disabled={isLoggingIn}
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <div className="relative">
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-11 pr-10"
-                disabled={isLoggingIn}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
+        <Tabs defaultValue="login" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-8">
+            <TabsTrigger value="login" className="gap-2">
+              <LogIn className="w-4 h-4" /> Sign In
+            </TabsTrigger>
+            <TabsTrigger value="signup" className="gap-2">
+              <UserPlus className="w-4 h-4" /> Register
+            </TabsTrigger>
+          </TabsList>
 
-          <Button 
-            type="submit" 
-            className="w-full h-11 bg-primary hover:bg-primary/90 font-semibold"
-            disabled={isLoggingIn}
-          >
-            {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In with Email"}
-          </Button>
-        </form>
+          <TabsContent value="login">
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Institutional Email</Label>
+                <Input 
+                  id="email"
+                  type="email" 
+                  placeholder="name@neu.edu.ph" 
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-11"
+                  disabled={isProcessing}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-11 pr-10"
+                    disabled={isProcessing}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full h-11 bg-primary hover:bg-primary/90 font-semibold"
+                disabled={isProcessing}
+              >
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="signup">
+            <form onSubmit={handleEmailSignUp} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reg-name">Full Name</Label>
+                <Input 
+                  id="reg-name"
+                  placeholder="Juan Dela Cruz" 
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="h-11"
+                  disabled={isProcessing}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reg-email">Institutional Email</Label>
+                <Input 
+                  id="reg-email"
+                  type="email" 
+                  placeholder="faculty1@neu.edu.ph" 
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-11"
+                  disabled={isProcessing}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reg-password">Password</Label>
+                <Input
+                  id="reg-password"
+                  type="password"
+                  placeholder="Create a password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-11"
+                  disabled={isProcessing}
+                />
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full h-11 bg-accent hover:bg-accent/90 text-white font-semibold"
+                disabled={isProcessing}
+              >
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Account"}
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
 
         <div className="relative my-8">
           <div className="absolute inset-0 flex items-center">
             <Separator className="w-full" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-muted-foreground font-medium">Or continue with</span>
+            <span className="bg-white px-2 text-muted-foreground font-medium">Or</span>
           </div>
         </div>
 
@@ -156,7 +259,7 @@ export default function HomePage() {
           variant="outline" 
           className="w-full h-11 gap-2 font-semibold border-2" 
           onClick={handleGoogleLogin}
-          disabled={isLoggingIn}
+          disabled={isProcessing}
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -164,7 +267,7 @@ export default function HomePage() {
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
           </svg>
-          Sign In with Google
+          Google Sign In
         </Button>
 
         <div className="mt-8">
