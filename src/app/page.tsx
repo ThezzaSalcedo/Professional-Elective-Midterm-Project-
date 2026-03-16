@@ -10,14 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle, UserPlus, LogIn } from 'lucide-react';
+import { ShieldCheck, Loader2, Eye, EyeOff, AlertCircle, UserPlus, LogIn, LogOut, UserCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { doc, setDoc } from 'firebase/firestore';
 
 export default function HomePage() {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, firebaseUser, isLoading: isAuthLoading, logout } = useAuth();
   const { auth, firestore } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
@@ -45,21 +45,42 @@ export default function HomePage() {
     setIsProcessing(true);
     try {
       await initiateEmailSignIn(auth, email, password);
-      toast({ title: "Welcome Back", description: "Signing you in..." });
+      toast({ title: "Connecting...", description: "Verifying credentials" });
     } catch (error: any) {
       setIsProcessing(false);
       let msg = "Invalid email or password.";
-      if (error.code === 'auth/user-not-found') msg = "No account found with this email. Please register first.";
-      if (error.code === 'auth/wrong-password') msg = "Incorrect password. Please try again.";
-      if (error.code === 'auth/invalid-credential') msg = "Incorrect email or password. Please verify your credentials.";
+      if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
+      if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
+      if (error.code === 'auth/invalid-credential') msg = "Incorrect credentials. Check email and password.";
       
       setErrorMessage(msg);
-      toast({
-        title: "Login Failed",
-        description: msg,
-        variant: "destructive"
-      });
+      toast({ title: "Login Failed", description: msg, variant: "destructive" });
     }
+  };
+
+  const createProfile = async (uid: string, userEmail: string, name: string) => {
+    const lowerEmail = userEmail.toLowerCase();
+    let collectionName = 'students';
+    let roleName: 'Admin' | 'Faculty' | 'Student' = 'Student';
+
+    if (lowerEmail.includes('admin')) {
+      collectionName = 'admins';
+      roleName = 'Admin';
+    } else if (lowerEmail.includes('faculty')) {
+      collectionName = 'faculty';
+      roleName = 'Faculty';
+    }
+
+    await setDoc(doc(firestore, collectionName, uid), {
+      id: uid,
+      email: userEmail,
+      fullName: name,
+      role: roleName,
+      canAddMoa: roleName !== 'Student',
+      canEditMoa: roleName !== 'Student',
+      canDeleteMoa: roleName === 'Admin',
+      createdAt: new Date().toISOString()
+    });
   };
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
@@ -72,35 +93,15 @@ export default function HomePage() {
       return;
     }
 
+    if (password.length < 6) {
+      setErrorMessage("Password must be at least 6 characters.");
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const cred = await initiateEmailSignUp(auth, email, password);
-      
-      // Determine collection based on email keywords
-      const lowerEmail = email.toLowerCase();
-      let collectionName = 'students';
-      let roleName: 'Admin' | 'Faculty' | 'Student' = 'Student';
-
-      if (lowerEmail.includes('admin')) {
-        collectionName = 'admins';
-        roleName = 'Admin';
-      } else if (lowerEmail.includes('faculty')) {
-        collectionName = 'faculty';
-        roleName = 'Faculty';
-      }
-
-      // Create the profile document
-      await setDoc(doc(firestore, collectionName, cred.user.uid), {
-        id: cred.user.uid,
-        email: email,
-        fullName: fullName,
-        role: roleName,
-        canAddMoa: roleName !== 'Student',
-        canEditMoa: roleName !== 'Student',
-        canDeleteMoa: roleName === 'Admin',
-        createdAt: new Date().toISOString()
-      });
-
+      await createProfile(cred.user.uid, email, fullName);
       toast({ title: "Account Created", description: `Welcome, ${fullName}!` });
       router.push('/dashboard');
     } catch (error: any) {
@@ -113,6 +114,20 @@ export default function HomePage() {
     }
   };
 
+  const handleFinishProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firebaseUser || !fullName) return;
+    setIsProcessing(true);
+    try {
+      await createProfile(firebaseUser.uid, firebaseUser.email, fullName);
+      toast({ title: "Profile Set Up", description: "You can now access the dashboard." });
+      router.push('/dashboard');
+    } catch (err: any) {
+      setIsProcessing(false);
+      setErrorMessage("Failed to save profile. Please try again.");
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setIsProcessing(true);
     setErrorMessage(null);
@@ -120,21 +135,49 @@ export default function HomePage() {
       await initiateGoogleSignIn(auth);
     } catch (error: any) {
       setIsProcessing(false);
-      const msg = error.message || "Could not connect to Google.";
-      setErrorMessage(msg);
-      toast({
-        title: "Google Login Failed",
-        description: msg,
-        variant: "destructive"
-      });
+      setErrorMessage(error.message || "Could not connect to Google.");
     }
   };
 
   if (!hasMounted) return null;
 
+  // Case where user is logged into Auth but missing Firestore data
+  if (firebaseUser && !user && !isAuthLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
+          <div className="text-center mb-6">
+            <UserCircle className="w-16 h-16 text-accent mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-primary">Finish Registration</h2>
+            <p className="text-muted-foreground text-sm mt-2">
+              We found your account ({firebaseUser.email}), but your profile data is missing.
+            </p>
+          </div>
+          <form onSubmit={handleFinishProfile} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Your Full Name</Label>
+              <Input 
+                placeholder="Enter your name" 
+                required 
+                value={fullName} 
+                onChange={(e) => setFullName(e.target.value)} 
+              />
+            </div>
+            <Button className="w-full bg-accent hover:bg-accent/90" disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Complete Profile"}
+            </Button>
+            <Button variant="ghost" className="w-full text-muted-foreground" onClick={logout} type="button">
+              <LogOut className="w-4 h-4 mr-2" /> Sign Out
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F3F6] px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-white/20">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-white mb-4 shadow-lg shadow-primary/20">
             <ShieldCheck className="w-8 h-8" />
@@ -168,12 +211,11 @@ export default function HomePage() {
                 <Input 
                   id="email"
                   type="email" 
-                  placeholder="name@neu.edu.ph" 
+                  placeholder="faculty1@neu.edu.ph" 
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-11"
-                  disabled={isProcessing}
                 />
               </div>
               
@@ -188,12 +230,11 @@ export default function HomePage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-11 pr-10"
-                    disabled={isProcessing}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -221,33 +262,30 @@ export default function HomePage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="h-11"
-                  disabled={isProcessing}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="reg-email">Work/Student Email</Label>
+                <Label htmlFor="reg-email">Work/Student Email (@neu.edu.ph)</Label>
                 <Input 
                   id="reg-email"
                   type="email" 
-                  placeholder="e.g. faculty1@neu.edu.ph" 
+                  placeholder="faculty1@neu.edu.ph" 
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-11"
-                  disabled={isProcessing}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="reg-password">Password</Label>
+                <Label htmlFor="reg-password">Password (min. 6 chars)</Label>
                 <Input
                   id="reg-password"
                   type="password"
-                  placeholder="Minimum 6 characters"
+                  placeholder="••••••••"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-11"
-                  disabled={isProcessing}
                 />
               </div>
               <Button 
@@ -266,7 +304,7 @@ export default function HomePage() {
             <Separator className="w-full" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-muted-foreground font-medium">Or continue with</span>
+            <span className="bg-white px-2 text-muted-foreground font-medium">Or</span>
           </div>
         </div>
 
@@ -284,12 +322,6 @@ export default function HomePage() {
           </svg>
           Institutional Google Account
         </Button>
-
-        <div className="mt-8">
-          <p className="text-[10px] text-muted-foreground text-center">
-            Institutional access restricted to NEU domains.
-          </p>
-        </div>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { doc, getDoc } from 'firebase/firestore';
 
 type AuthContextType = {
   user: User | null;
+  firebaseUser: any | null;
   logout: () => void;
   isLoading: boolean;
 };
@@ -55,7 +56,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error("AuthContext: Error fetching user profile:", error);
         }
         
-        // If still null, it means the user exists in Auth but not in Firestore collections
         setProfile(foundProfile);
       } else {
         setProfile(null);
@@ -74,7 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user: profile, logout, isLoading: isUserLoading || isLoadingProfile }}>
+    <AuthContext.Provider value={{ 
+      user: profile, 
+      firebaseUser,
+      logout, 
+      isLoading: isUserLoading || isLoadingProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );
