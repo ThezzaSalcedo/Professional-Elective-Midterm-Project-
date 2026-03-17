@@ -80,7 +80,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
             const docSnap = await getDoc(userRef);
             if (!docSnap.exists()) {
               const email = firebaseUser.email || '';
-              // Point 1: Immediate Auto-Profile Creation for institutional users
+              // Sequential Profile Creation: Ensure every institutional user has a DB entry for rules
               if (email.toLowerCase().endsWith('@neu.edu.ph')) {
                 let roleName = 'student';
                 const lowerEmail = email.toLowerCase();

@@ -18,7 +18,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -31,26 +30,21 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [isSeeding, setIsSeeding] = useState(false);
-  const [useAdvancedFilters, setUseAdvancedFilters] = useState(false);
 
-  // Simplified query that avoids complex composite indexes if building
+  // Queries are now strictly aligned with security rules to prevent permission denials.
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
+    // Super-admins can list everything
     if (user.role === 'admin') return base;
     
-    // Students/Faculty normally need status + isDeleted range.
-    // If indices are building, we can fallback to simpler queries.
-    if (!useAdvancedFilters) {
-      // Very simple query to allow initial load
-      return base;
-    }
-
+    // Faculty restricted to non-deleted records
     if (user.role === 'faculty') {
       return query(base, where('isDeleted', '==', false));
     }
     
+    // Students restricted to approved AND non-deleted records
     if (user.role === 'student') {
       return query(
         base, 
@@ -61,40 +55,25 @@ export default function DashboardPage() {
     }
     
     return base;
-  }, [firestore, user, useAdvancedFilters]);
+  }, [firestore, user]);
 
   const { data: moas, isLoading: isMoaLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
   const visibleMoas = useMemo(() => {
     if (!moas) return [];
-    let base = moas;
+    if (!search) return moas;
     
-    // Filter out deleted items manually if in simple mode
-    if (!useAdvancedFilters && user?.role !== 'admin') {
-      base = base.filter(m => !m.isDeleted);
-    }
-
-    // Apply student restriction manually if in simple mode
-    if (!useAdvancedFilters && user?.role === 'student') {
-      base = base.filter(m => m.status.startsWith('APPROVED'));
-    }
-
-    if (search) {
-      const q = search.toLowerCase();
-      base = base.filter(m => 
-        m.companyName.toLowerCase().includes(q) ||
-        m.college.toLowerCase().includes(q) ||
-        m.industryType.toLowerCase().includes(q)
-      );
-    }
-
-    return base;
-  }, [moas, search, useAdvancedFilters, user?.role]);
+    const q = search.toLowerCase();
+    return moas.filter(m => 
+      m.companyName.toLowerCase().includes(q) ||
+      m.college.toLowerCase().includes(q) ||
+      m.industryType.toLowerCase().includes(q)
+    );
+  }, [moas, search]);
 
   const stats = useMemo(() => {
     if (!moas) return [];
-    // Recalculate stats based on visible set if not admin
-    const sourceSet = user?.role === 'admin' ? moas : moas.filter(m => !m.isDeleted);
+    const sourceSet = moas;
     
     const active = sourceSet.filter(m => m.status?.startsWith('APPROVED')).length;
     const processing = sourceSet.filter(m => m.status?.startsWith('PROCESSING')).length;
@@ -107,7 +86,7 @@ export default function DashboardPage() {
       { title: 'Expiring Soon', value: expiring, icon: AlertTriangle, color: 'bg-orange-500' },
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
-  }, [moas, user?.role]);
+  }, [moas]);
 
   const handleSeedData = async () => {
     if (!firestore || !user || !firebaseUser) return;
@@ -166,16 +145,9 @@ export default function DashboardPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <Switch 
-              id="advanced-filters" 
-              checked={useAdvancedFilters} 
-              onCheckedChange={setUseAdvancedFilters} 
-            />
-            <Label htmlFor="advanced-filters" className="text-xs text-muted-foreground">
-              {useAdvancedFilters ? "Using Server-Side Indexing" : "Using Local Filtering (Index Safe)"}
-            </Label>
-          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            System authorization confirmed for <span className="font-semibold text-primary capitalize">{user?.role}</span> access.
+          </p>
         </div>
         <div className="flex gap-3">
           {user?.role === 'admin' && (
@@ -193,9 +165,7 @@ export default function DashboardPage() {
           <AlertTitle className="text-blue-800 font-bold">Building Database Indexes</AlertTitle>
           <AlertDescription className="text-blue-700">
             The dashboard is currently optimizing its database. This may take a few minutes. 
-            We are using local filtering in the meantime. 
-            <br />
-            <span className="text-xs italic mt-1 block">Check the browser console for the direct index creation link.</span>
+            Check your console for the link to create the required composite index.
           </AlertDescription>
         </Alert>
       )}

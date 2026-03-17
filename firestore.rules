@@ -8,7 +8,6 @@ service cloud.firestore {
     }
 
     // Helper: Check if user has an institutional email
-    // Temporary: Do not require email_verified as requested for testing
     function isInstitutional() {
       return isSignedIn() && request.auth.token.email.matches('.*@neu\\.edu\\.ph$');
     }
@@ -27,13 +26,13 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Point 4: allow all @neu.edu.ph users to list the moas collection
-      // Students restricted to APPROVED records
+      // List rules must match the filters used in the query exactly
       allow list: if isSignedIn() && (
         hasRole('admin') || 
-        hasRole('faculty') || 
+        (hasRole('faculty') && resource.data.isDeleted == false) ||
         (
           isInstitutional() &&
+          hasRole('student') &&
           resource.data.isDeleted == false && 
           resource.data.status >= 'APPROVED' && 
           resource.data.status < 'APPROVEE'

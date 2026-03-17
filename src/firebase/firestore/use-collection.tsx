@@ -38,6 +38,8 @@ export interface InternalQuery extends Query<DocumentData> {
 
 /**
  * Sequential Loading and enhanced error handling for missing indexes.
+ * The hook waits for the institutional profile to be fully synchronized 
+ * before attempting to query restricted collections.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
@@ -52,6 +54,7 @@ export function useCollection<T = any>(
   const [isIndexBuilding, setIsIndexBuilding] = useState(false);
 
   useEffect(() => {
+    // Sequential Loading: Prevent queries while profile is resolving
     if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading || !user) {
       setData(null);
       setIsLoading(isUserLoading || isProfileLoading);
@@ -84,11 +87,10 @@ export function useCollection<T = any>(
 
         let finalError: Error = firestoreError;
 
-        // Handle missing index error
+        // Handle missing index error - log the direct link for the developer
         if (firestoreError.code === 'failed-precondition') {
           setIsIndexBuilding(true);
           console.error("FIREBASE INDEX REQUIRED: Please click the link below to create the required composite index:");
-          // The error message usually contains the link
           console.error(firestoreError.message);
           finalError = new Error('The dashboard is currently optimizing its database. This may take a few minutes.');
         } 
@@ -128,6 +130,7 @@ export function useMoaCollection<T = any>(
 
   const maskedData = useMemo(() => {
     if (!rawData) return null;
+    // Security layer: Mask metadata for students even if queries were bypassable
     if (user?.role === 'student') {
       return rawData.map(item => {
         const masked = { ...item };

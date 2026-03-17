@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { MOA, AuditEntry } from '@/app/lib/types';
@@ -21,18 +20,20 @@ export default function MoaListPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [selectedMoa, setSelectedMoa] = useState<MOA | null>(null);
-  const [useAdvancedFilters, setUseAdvancedFilters] = useState(false);
 
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
-    if (user.role === 'admin' || !useAdvancedFilters) return base;
+    // Admins can view everything including deleted records
+    if (user.role === 'admin') return base;
     
+    // Faculty only view non-deleted records
     if (user.role === 'faculty') {
       return query(base, where('isDeleted', '==', false));
     }
     
+    // Students only view approved, non-deleted records (matches security rules exactly)
     if (user.role === 'student') {
       return query(
         base, 
@@ -43,19 +44,11 @@ export default function MoaListPage() {
     }
     
     return base;
-  }, [firestore, user, useAdvancedFilters]);
+  }, [firestore, user]);
 
   const { data: moas, isLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
   const filteredMoas = (moas || [])
-    .filter(m => {
-      // Manual local filtering for safety
-      if (!useAdvancedFilters && user?.role !== 'admin') {
-        if (m.isDeleted) return false;
-        if (user?.role === 'student' && !m.status.startsWith('APPROVED')) return false;
-      }
-      return true;
-    })
     .filter(m => 
       m.companyName.toLowerCase().includes(search.toLowerCase()) ||
       m.hteId.toLowerCase().includes(search.toLowerCase())
@@ -101,16 +94,9 @@ export default function MoaListPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">Partnership Registry</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <Switch 
-              id="advanced-filters-list" 
-              checked={useAdvancedFilters} 
-              onCheckedChange={setUseAdvancedFilters} 
-            />
-            <Label htmlFor="advanced-filters-list" className="text-xs text-muted-foreground">
-              Server-Side Indexing
-            </Label>
-          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Displaying authorized records for institutional {user?.role} account.
+          </p>
         </div>
         <div className="relative w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -121,10 +107,10 @@ export default function MoaListPage() {
       {isIndexBuilding && (
         <Alert variant="default" className="bg-blue-50 border-blue-200">
           <Database className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-800 font-bold">Optimizing Registry</AlertTitle>
+          <AlertTitle className="text-blue-800 font-bold">Building Database Indexes</AlertTitle>
           <AlertDescription className="text-blue-700">
-            The dashboard is currently optimizing its database. This may take a few minutes. 
-            Check your console for the index link.
+            The database is optimizing its performance for complex queries. This may take a few minutes. 
+            Check your developer console for the required index link.
           </AlertDescription>
         </Alert>
       )}
@@ -223,7 +209,7 @@ export default function MoaListPage() {
             )) : (
               <tr>
                 <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic">
-                  No records found.
+                  No records found matching your current filters.
                 </td>
               </tr>
             )}
