@@ -1,17 +1,18 @@
+
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-import { User } from '@/app/lib/types';
-import { mockUsers } from '@/app/lib/mock-data';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, doc, updateDoc } from 'firebase/firestore';
 import { 
-  Users, 
   ShieldCheck, 
   Ban, 
   Unlock, 
   UserPlus,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -20,49 +21,34 @@ import { cn } from '@/lib/utils';
 
 export default function UserManagementPage() {
   const { user: currentUser } = useAuth();
+  const { firestore } = useFirebase();
   const { toast } = useToast();
-  const [users, setUsers] = useState<User[]>([]);
 
-  useEffect(() => {
-    // Check if current user is admin
-    if (currentUser?.role !== 'admin') return;
-    
-    const stored = localStorage.getItem('moa_user_list');
-    if (stored) {
-      setUsers(JSON.parse(stored));
-    } else {
-      setUsers(mockUsers);
-      localStorage.setItem('moa_user_list', JSON.stringify(mockUsers));
-    }
-  }, [currentUser]);
+  const usersQuery = useMemoFirebase(() => {
+    if (!firestore || currentUser?.role !== 'admin') return null;
+    return collection(firestore, 'users');
+  }, [firestore, currentUser]);
 
-  const updateUsers = (newList: User[]) => {
-    setUsers(newList);
-    localStorage.setItem('moa_user_list', JSON.stringify(newList));
+  const { data: users, isLoading } = useCollection(usersQuery);
+
+  const toggleBlock = async (userId: string, currentStatus: boolean, name: string) => {
+    if (!firestore) return;
+    const ref = doc(firestore, 'users', userId);
+    await updateDoc(ref, { isBlocked: !currentStatus });
+    toast({ 
+      title: !currentStatus ? "User Blocked" : "User Unblocked", 
+      description: `${name} status updated.` 
+    });
   };
 
-  const toggleBlock = (userId: string) => {
-    const updated = users.map(u => {
-      if (u.id === userId) {
-        const newState = !u.isBlocked;
-        toast({ title: newState ? "User Blocked" : "User Unblocked", description: `${u.name} status updated.` });
-        return { ...u, isBlocked: newState };
-      }
-      return u;
+  const toggleCanEdit = async (userId: string, currentStatus: boolean, name: string) => {
+    if (!firestore) return;
+    const ref = doc(firestore, 'users', userId);
+    await updateDoc(ref, { canEditMoa: !currentStatus });
+    toast({ 
+      title: "Permission Updated", 
+      description: `${name} can now ${!currentStatus ? 'edit' : 'only view'} MOAs.` 
     });
-    updateUsers(updated);
-  };
-
-  const toggleCanEdit = (userId: string) => {
-    const updated = users.map(u => {
-      if (u.id === userId) {
-        const newState = !u.canEdit;
-        toast({ title: "Permission Updated", description: `${u.name} can now ${newState ? 'edit' : 'only view'} MOAs.` });
-        return { ...u, canEdit: newState };
-      }
-      return u;
-    });
-    updateUsers(updated);
   };
 
   if (currentUser?.role !== 'admin') {
@@ -75,6 +61,15 @@ export default function UserManagementPage() {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="py-20 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="animate-spin text-primary h-8 w-8" />
+        <p className="text-sm text-muted-foreground">Synchronizing user registry...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -82,10 +77,6 @@ export default function UserManagementPage() {
           <h1 className="text-2xl font-bold text-primary">System Users</h1>
           <p className="text-sm text-muted-foreground">Manage roles, permissions, and access control.</p>
         </div>
-        <Button className="gap-2">
-          <UserPlus className="w-4 h-4" />
-          Add User
-        </Button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -100,10 +91,10 @@ export default function UserManagementPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {users.map((u) => (
+            {users?.map((u: any) => (
               <tr key={u.id} className={cn("hover:bg-muted/5 transition-colors", u.isBlocked && "bg-muted/50")}>
                 <td className="px-6 py-4">
-                  <div className="font-semibold">{u.name}</div>
+                  <div className="font-semibold">{u.fullName || 'Unnamed User'}</div>
                   <div className="text-xs text-muted-foreground">{u.email}</div>
                 </td>
                 <td className="px-6 py-4">
@@ -119,8 +110,8 @@ export default function UserManagementPage() {
                   {u.role === 'faculty' ? (
                     <div className="flex justify-center">
                       <Switch 
-                        checked={u.canEdit} 
-                        onCheckedChange={() => toggleCanEdit(u.id)}
+                        checked={u.canEditMoa} 
+                        onCheckedChange={() => toggleCanEdit(u.id, !!u.canEditMoa, u.fullName)}
                         disabled={u.isBlocked}
                       />
                     </div>
@@ -148,7 +139,7 @@ export default function UserManagementPage() {
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      onClick={() => toggleBlock(u.id)}
+                      onClick={() => toggleBlock(u.id, !!u.isBlocked, u.fullName)}
                       className={cn(u.isBlocked ? "border-green-200 text-green-600 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50")}
                     >
                       {u.isBlocked ? (

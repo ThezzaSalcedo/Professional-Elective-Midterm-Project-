@@ -10,6 +10,7 @@ import {
   Users, 
   LogOut, 
   ShieldCheck,
+  History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
@@ -24,9 +25,9 @@ export function Sidebar() {
     { label: 'MOA List', href: '/dashboard/moas', icon: FileText },
   ];
 
-  // Using lowercase role checks to match standard
   if (user?.role === 'admin') {
     navItems.push({ label: 'User Management', href: '/dashboard/admin/users', icon: Users });
+    navItems.push({ label: 'Audit Logs', href: '/dashboard/admin/audit-logs', icon: History });
   }
 
   return (
