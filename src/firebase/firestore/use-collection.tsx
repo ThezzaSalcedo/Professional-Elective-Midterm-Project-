@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -38,8 +39,6 @@ export interface InternalQuery extends Query<DocumentData> {
 
 /**
  * Sequential Loading and enhanced error handling for missing indexes.
- * The hook waits for the institutional profile to be fully synchronized 
- * before attempting to query restricted collections.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
@@ -54,7 +53,6 @@ export function useCollection<T = any>(
   const [isIndexBuilding, setIsIndexBuilding] = useState(false);
 
   useEffect(() => {
-    // Sequential Loading: Prevent queries while profile is resolving
     if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading || !user) {
       setData(null);
       setIsLoading(isUserLoading || isProfileLoading);
@@ -87,11 +85,8 @@ export function useCollection<T = any>(
 
         let finalError: Error = firestoreError;
 
-        // Handle missing index error - log the direct link for the developer
         if (firestoreError.code === 'failed-precondition') {
           setIsIndexBuilding(true);
-          console.error("FIREBASE INDEX REQUIRED: Please click the link below to create the required composite index:");
-          console.error(firestoreError.message);
           finalError = new Error('The dashboard is currently optimizing its database. This may take a few minutes.');
         } 
         else if (firestoreError.code === 'permission-denied') {
@@ -120,7 +115,7 @@ export function useCollection<T = any>(
 }
 
 /**
- * Specialized hook for MOA collections with Field Masking and Query Stabilization.
+ * Specialized hook for MOA collections with Role-Based Field Masking.
  */
 export function useMoaCollection<T = any>(
   memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean}) | null | undefined
@@ -130,16 +125,23 @@ export function useMoaCollection<T = any>(
 
   const maskedData = useMemo(() => {
     if (!rawData) return null;
-    // Security layer: Mask metadata for students even if queries were bypassable
-    if (user?.role === 'student') {
-      return rawData.map(item => {
-        const masked = { ...item };
+    
+    // Security layer: Mask sensitive fields for non-admins
+    return rawData.map(item => {
+      const masked = { ...item };
+      
+      // Faculty and Students cannot see the audit trail
+      if (user?.role !== 'admin') {
         delete (masked as any).auditTrail;
+      }
+      
+      // Students cannot see soft-deletion flags (they shouldn't see deleted records anyway)
+      if (user?.role === 'student') {
         delete (masked as any).isDeleted;
-        return masked;
-      });
-    }
-    return rawData;
+      }
+      
+      return masked;
+    });
   }, [rawData, user?.role]);
 
   return { data: maskedData, isLoading, error, isIndexBuilding };

@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -26,8 +27,7 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Simplified list rules to avoid composite index requirements during development
-      // We now enforce status and deletion filters in the frontend code
+      // Visibility Rules
       allow list: if isSignedIn() && (
         hasRole('admin') || 
         hasRole('faculty') ||

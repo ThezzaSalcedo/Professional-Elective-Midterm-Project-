@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -28,8 +29,7 @@ export default function MoaListPage() {
     // Admins can view everything including deleted records
     if (user.role === 'admin') return base;
     
-    // Simplified: Only filter by isDeleted to avoid composite index requirements.
-    // Status filtering for students is handled locally.
+    // Others can only see non-deleted records
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user]);
 
@@ -38,7 +38,7 @@ export default function MoaListPage() {
   const filteredMoas = useMemo(() => {
     if (!moas) return [];
     
-    // 1. Role-based local filtering (fallback for simplified server query)
+    // 1. Role-based local filtering (fallback/secondary guard)
     let accessible = moas;
     if (user?.role === 'student') {
       accessible = accessible.filter(m => m.status && m.status.startsWith('APPROVED'));
@@ -107,8 +107,7 @@ export default function MoaListPage() {
           <Database className="h-4 w-4 text-blue-600" />
           <AlertTitle className="text-blue-800 font-bold">Building Database Indexes</AlertTitle>
           <AlertDescription className="text-blue-700">
-            The database is optimizing its performance for complex queries. This may take a few minutes. 
-            Check your developer console for the required index link.
+            The database is optimizing its performance for complex queries. This may take a few minutes.
           </AlertDescription>
         </Alert>
       )}
@@ -124,10 +123,10 @@ export default function MoaListPage() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>
-              <th className="px-6 py-4 text-left">Company Details</th>
-              <th className="px-6 py-4 text-left">College</th>
-              <th className="px-6 py-4 text-left">Status</th>
-              <th className="px-6 py-4 text-right">Actions</th>
+              <th className="px-6 py-4 text-left font-semibold">Company Details</th>
+              <th className="px-6 py-4 text-left font-semibold">College</th>
+              <th className="px-6 py-4 text-left font-semibold">Status</th>
+              <th className="px-6 py-4 text-right font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -137,7 +136,7 @@ export default function MoaListPage() {
                   <div className="font-bold">{m.companyName}</div>
                   <div className="text-xs text-muted-foreground">{m.hteId}</div>
                 </td>
-                <td className="px-6 py-4">{m.college}</td>
+                <td className="px-6 py-4 font-medium">{m.college}</td>
                 <td className="px-6 py-4">
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
