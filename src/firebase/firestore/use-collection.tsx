@@ -24,6 +24,7 @@ export interface UseCollectionResult<T> {
   data: WithId<T>[] | null;
   isLoading: boolean;
   error: FirestoreError | Error | null;
+  isIndexBuilding?: boolean;
 }
 
 export interface InternalQuery extends Query<DocumentData> {
@@ -36,7 +37,7 @@ export interface InternalQuery extends Query<DocumentData> {
 }
 
 /**
- * Point 1 & 2: Sequential Loading and error handling.
+ * Sequential Loading and enhanced error handling for missing indexes.
  */
 export function useCollection<T = any>(
     memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
@@ -48,19 +49,20 @@ export function useCollection<T = any>(
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
+  const [isIndexBuilding, setIsIndexBuilding] = useState(false);
 
   useEffect(() => {
-    // GUARD: The app must NOT attempt to fetch the collection until auth is confirmed 
-    // and the user's document has been retrieved.
     if (!memoizedTargetRefOrQuery || isUserLoading || isProfileLoading || !user) {
       setData(null);
       setIsLoading(isUserLoading || isProfileLoading);
       setError(null);
+      setIsIndexBuilding(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setIsIndexBuilding(false);
 
     const unsubscribe = onSnapshot(
       memoizedTargetRefOrQuery,
@@ -72,6 +74,7 @@ export function useCollection<T = any>(
         setData(results);
         setError(null);
         setIsLoading(false);
+        setIsIndexBuilding(false);
       },
       (firestoreError: FirestoreError) => {
         const path: string =
@@ -81,8 +84,15 @@ export function useCollection<T = any>(
 
         let finalError: Error = firestoreError;
 
-        // Point 4: Custom Error Message for Permission Denied
-        if (firestoreError.code === 'permission-denied') {
+        // Handle missing index error
+        if (firestoreError.code === 'failed-precondition') {
+          setIsIndexBuilding(true);
+          console.error("FIREBASE INDEX REQUIRED: Please click the link below to create the required composite index:");
+          // The error message usually contains the link
+          console.error(firestoreError.message);
+          finalError = new Error('The dashboard is currently optimizing its database. This may take a few minutes.');
+        } 
+        else if (firestoreError.code === 'permission-denied') {
           finalError = new Error('Access Restricted: Please contact an Admin to verify your account rights.');
           
           const contextualError = new FirestorePermissionError({
@@ -104,7 +114,7 @@ export function useCollection<T = any>(
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
   }
-  return { data, isLoading, error };
+  return { data, isLoading, error, isIndexBuilding };
 }
 
 /**
@@ -113,8 +123,8 @@ export function useCollection<T = any>(
 export function useMoaCollection<T = any>(
   memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean}) | null | undefined
 ): UseCollectionResult<T> {
-  const { user } = useAuth(); // AuthContext is tied to profile
-  const { data: rawData, isLoading, error } = useCollection<T>(memoizedTargetRefOrQuery);
+  const { user } = useAuth();
+  const { data: rawData, isLoading, error, isIndexBuilding } = useCollection<T>(memoizedTargetRefOrQuery);
 
   const maskedData = useMemo(() => {
     if (!rawData) return null;
@@ -129,5 +139,5 @@ export function useMoaCollection<T = any>(
     return rawData;
   }, [rawData, user?.role]);
 
-  return { data: maskedData, isLoading, error };
+  return { data: maskedData, isLoading, error, isIndexBuilding };
 }

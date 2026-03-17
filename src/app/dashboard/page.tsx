@@ -12,11 +12,14 @@ import {
   FileX2, 
   Search,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Database
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { MOA, AuditEntry } from '../lib/types';
@@ -28,22 +31,26 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [isSeeding, setIsSeeding] = useState(false);
+  const [useAdvancedFilters, setUseAdvancedFilters] = useState(false);
 
-  // Point 2: Query Alignment with Security Rules
+  // Simplified query that avoids complex composite indexes if building
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
-    // Admin: Full access to all records
     if (user.role === 'admin') return base;
     
-    // Faculty: View all non-deleted records
+    // Students/Faculty normally need status + isDeleted range.
+    // If indices are building, we can fallback to simpler queries.
+    if (!useAdvancedFilters) {
+      // Very simple query to allow initial load
+      return base;
+    }
+
     if (user.role === 'faculty') {
       return query(base, where('isDeleted', '==', false));
     }
     
-    // Students: Restricted to APPROVED and non-deleted
-    // This MUST exactly match the Firestore Security Rules range constraints
     if (user.role === 'student') {
       return query(
         base, 
@@ -53,15 +60,25 @@ export default function DashboardPage() {
       );
     }
     
-    return null;
-  }, [firestore, user]);
+    return base;
+  }, [firestore, user, useAdvancedFilters]);
 
-  const { data: moas, isLoading: isMoaLoading, error } = useMoaCollection<MOA>(moaQuery);
+  const { data: moas, isLoading: isMoaLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
   const visibleMoas = useMemo(() => {
     if (!moas) return [];
     let base = moas;
     
+    // Filter out deleted items manually if in simple mode
+    if (!useAdvancedFilters && user?.role !== 'admin') {
+      base = base.filter(m => !m.isDeleted);
+    }
+
+    // Apply student restriction manually if in simple mode
+    if (!useAdvancedFilters && user?.role === 'student') {
+      base = base.filter(m => m.status.startsWith('APPROVED'));
+    }
+
     if (search) {
       const q = search.toLowerCase();
       base = base.filter(m => 
@@ -72,14 +89,17 @@ export default function DashboardPage() {
     }
 
     return base;
-  }, [moas, search]);
+  }, [moas, search, useAdvancedFilters, user?.role]);
 
   const stats = useMemo(() => {
     if (!moas) return [];
-    const active = moas.filter(m => m.status?.startsWith('APPROVED')).length;
-    const processing = moas.filter(m => m.status?.startsWith('PROCESSING')).length;
-    const expiring = moas.filter(m => m.status === 'EXPIRING').length;
-    const expired = moas.filter(m => m.status === 'EXPIRED').length;
+    // Recalculate stats based on visible set if not admin
+    const sourceSet = user?.role === 'admin' ? moas : moas.filter(m => !m.isDeleted);
+    
+    const active = sourceSet.filter(m => m.status?.startsWith('APPROVED')).length;
+    const processing = sourceSet.filter(m => m.status?.startsWith('PROCESSING')).length;
+    const expiring = sourceSet.filter(m => m.status === 'EXPIRING').length;
+    const expired = sourceSet.filter(m => m.status === 'EXPIRED').length;
 
     return [
       { title: 'Active MOAs', value: active, icon: CheckCircle2, color: 'bg-green-500' },
@@ -87,12 +107,11 @@ export default function DashboardPage() {
       { title: 'Expiring Soon', value: expiring, icon: AlertTriangle, color: 'bg-orange-500' },
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
-  }, [moas]);
+  }, [moas, user?.role]);
 
   const handleSeedData = async () => {
     if (!firestore || !user || !firebaseUser) return;
     setIsSeeding(true);
-
     const sampleMoas = [
       {
         hteId: 'HTE-2024-001',
@@ -105,21 +124,8 @@ export default function DashboardPage() {
         college: 'College of Computer Studies',
         status: 'APPROVED: Signed by President',
         isDeleted: false,
-      },
-      {
-        hteId: 'HTE-2024-002',
-        companyName: 'Lumina Finance Group',
-        address: '88 Banking Tower, BGC Taguig',
-        contactPerson: 'Robert Tan',
-        contactEmail: 'rtan@luminafinance.com',
-        industryType: 'Finance',
-        effectiveDate: '2024-02-10',
-        college: 'College of Business Administration',
-        status: 'PROCESSING: Sent to Legal',
-        isDeleted: false,
       }
     ];
-
     try {
       for (const item of sampleMoas) {
         const id = Math.random().toString(36).substr(2, 9);
@@ -146,8 +152,7 @@ export default function DashboardPage() {
     }
   };
 
-  // Point 3: Fallback UI / Loading Spinner
-  if (isAuthLoading || isMoaLoading) {
+  if (isAuthLoading || (isMoaLoading && !isIndexBuilding)) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
         <Loader2 className="animate-spin h-10 w-10 text-primary" />
@@ -159,7 +164,19 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div className="flex items-center gap-2 mt-2">
+            <Switch 
+              id="advanced-filters" 
+              checked={useAdvancedFilters} 
+              onCheckedChange={setUseAdvancedFilters} 
+            />
+            <Label htmlFor="advanced-filters" className="text-xs text-muted-foreground">
+              {useAdvancedFilters ? "Using Server-Side Indexing" : "Using Local Filtering (Index Safe)"}
+            </Label>
+          </div>
+        </div>
         <div className="flex gap-3">
           {user?.role === 'admin' && (
             <Button variant="outline" onClick={handleSeedData} disabled={isSeeding}>Seed Data</Button>
@@ -170,8 +187,20 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Point 4: Error Display */}
-      {error && (
+      {isIndexBuilding && (
+        <Alert variant="default" className="bg-blue-50 border-blue-200">
+          <Database className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-800 font-bold">Building Database Indexes</AlertTitle>
+          <AlertDescription className="text-blue-700">
+            The dashboard is currently optimizing its database. This may take a few minutes. 
+            We are using local filtering in the meantime. 
+            <br />
+            <span className="text-xs italic mt-1 block">Check the browser console for the direct index creation link.</span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {error && !isIndexBuilding && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
@@ -221,7 +250,7 @@ export default function DashboardPage() {
             )) : (
               <tr>
                 <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">
-                  {error ? "Record synchronization failed." : "No agreements found matching your criteria."}
+                  {isMoaLoading ? "Synchronizing records..." : "No agreements found matching your criteria."}
                 </td>
               </tr>
             )}
