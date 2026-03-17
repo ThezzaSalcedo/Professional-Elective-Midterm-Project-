@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase, useMoaCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -28,31 +28,29 @@ export default function MoaListPage() {
     // Admins can view everything including deleted records
     if (user.role === 'admin') return base;
     
-    // Faculty only view non-deleted records
-    if (user.role === 'faculty') {
-      return query(base, where('isDeleted', '==', false));
-    }
-    
-    // Students only view approved, non-deleted records (matches security rules exactly)
-    if (user.role === 'student') {
-      return query(
-        base, 
-        where('isDeleted', '==', false),
-        where('status', '>=', 'APPROVED'),
-        where('status', '<', 'APPROVEE')
-      );
-    }
-    
-    return base;
+    // Simplified: Only filter by isDeleted to avoid composite index requirements.
+    // Status filtering for students is handled locally.
+    return query(base, where('isDeleted', '==', false));
   }, [firestore, user]);
 
   const { data: moas, isLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
-  const filteredMoas = (moas || [])
-    .filter(m => 
-      m.companyName.toLowerCase().includes(search.toLowerCase()) ||
-      m.hteId.toLowerCase().includes(search.toLowerCase())
+  const filteredMoas = useMemo(() => {
+    if (!moas) return [];
+    
+    // 1. Role-based local filtering (fallback for simplified server query)
+    let accessible = moas;
+    if (user?.role === 'student') {
+      accessible = accessible.filter(m => m.status && m.status.startsWith('APPROVED'));
+    }
+
+    // 2. Search-based local filtering
+    const q = search.toLowerCase();
+    return accessible.filter(m => 
+      m.companyName.toLowerCase().includes(q) ||
+      m.hteId.toLowerCase().includes(q)
     );
+  }, [moas, search, user?.role]);
 
   const handleSoftDelete = async (id: string) => {
     if (!firestore || !user || !firebaseUser) return;

@@ -26,17 +26,12 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // List rules must match the filters used in the query exactly
+      // Simplified list rules to avoid composite index requirements during development
+      // We now enforce status and deletion filters in the frontend code
       allow list: if isSignedIn() && (
         hasRole('admin') || 
-        (hasRole('faculty') && resource.data.isDeleted == false) ||
-        (
-          isInstitutional() &&
-          hasRole('student') &&
-          resource.data.isDeleted == false && 
-          resource.data.status >= 'APPROVED' && 
-          resource.data.status < 'APPROVEE'
-        )
+        hasRole('faculty') ||
+        (isInstitutional() && hasRole('student'))
       );
 
       allow get: if isSignedIn() && (

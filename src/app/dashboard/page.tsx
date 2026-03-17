@@ -31,7 +31,7 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('');
   const [isSeeding, setIsSeeding] = useState(false);
 
-  // Queries are now strictly aligned with security rules to prevent permission denials.
+  // Simplified queries to avoid composite index requirements while they build
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
@@ -39,41 +39,39 @@ export default function DashboardPage() {
     // Super-admins can list everything
     if (user.role === 'admin') return base;
     
-    // Faculty restricted to non-deleted records
-    if (user.role === 'faculty') {
-      return query(base, where('isDeleted', '==', false));
-    }
-    
-    // Students restricted to approved AND non-deleted records
-    if (user.role === 'student') {
-      return query(
-        base, 
-        where('isDeleted', '==', false),
-        where('status', '>=', 'APPROVED'),
-        where('status', '<', 'APPROVEE')
-      );
-    }
-    
-    return base;
+    // Simplified: Only filter by isDeleted. Status filtering is handled locally in useMemo below.
+    // This allows the app to function without a composite index.
+    return query(base, where('isDeleted', '==', false));
   }, [firestore, user]);
 
   const { data: moas, isLoading: isMoaLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
+  // Local filtering logic to complement the simplified server query
   const visibleMoas = useMemo(() => {
     if (!moas) return [];
-    if (!search) return moas;
     
+    // Filter by role-based access locally
+    let filtered = moas;
+    if (user?.role === 'student') {
+      filtered = filtered.filter(m => m.status && m.status.startsWith('APPROVED'));
+    }
+
+    // Filter by search term
+    if (!search) return filtered;
     const q = search.toLowerCase();
-    return moas.filter(m => 
+    return filtered.filter(m => 
       m.companyName.toLowerCase().includes(q) ||
       m.college.toLowerCase().includes(q) ||
       m.industryType.toLowerCase().includes(q)
     );
-  }, [moas, search]);
+  }, [moas, search, user?.role]);
 
   const stats = useMemo(() => {
     if (!moas) return [];
-    const sourceSet = moas;
+    // Stats are calculated based on all accessible records
+    const sourceSet = user?.role === 'student' 
+      ? moas.filter(m => m.status?.startsWith('APPROVED'))
+      : moas;
     
     const active = sourceSet.filter(m => m.status?.startsWith('APPROVED')).length;
     const processing = sourceSet.filter(m => m.status?.startsWith('PROCESSING')).length;
@@ -86,7 +84,7 @@ export default function DashboardPage() {
       { title: 'Expiring Soon', value: expiring, icon: AlertTriangle, color: 'bg-orange-500' },
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
-  }, [moas]);
+  }, [moas, user?.role]);
 
   const handleSeedData = async () => {
     if (!firestore || !user || !firebaseUser) return;
@@ -164,8 +162,8 @@ export default function DashboardPage() {
           <Database className="h-4 w-4 text-blue-600" />
           <AlertTitle className="text-blue-800 font-bold">Building Database Indexes</AlertTitle>
           <AlertDescription className="text-blue-700">
-            The dashboard is currently optimizing its database. This may take a few minutes. 
-            Check your console for the link to create the required composite index.
+            The dashboard is currently optimizing its database for high-performance filtering. This may take a few minutes. 
+            Check your developer console for the required index link.
           </AlertDescription>
         </Alert>
       )}
