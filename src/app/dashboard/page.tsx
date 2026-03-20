@@ -32,16 +32,20 @@ export default function DashboardPage() {
   const [isSeeding, setIsSeeding] = useState(false);
   const [now, setNow] = useState<Date>(new Date());
 
+  // Handle hydration by setting date on mount
   useEffect(() => {
     setNow(new Date());
   }, []);
 
+  // Dynamic query based on role
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
+    // Admins see all for oversight, but we'll filter for stats
     if (user.role === 'admin') return base;
     
+    // Students see only approved, non-deleted records
     if (user.role === 'student') {
       return query(base, 
         where('isDeleted', '==', false),
@@ -50,35 +54,28 @@ export default function DashboardPage() {
       );
     }
     
+    // Faculty see all active records
     return query(base, where('isDeleted', '==', false));
-  }, [firestore, user]);
+  }, [firestore, user?.role]);
 
   const { data: moas, isLoading: isMoaLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
-  const visibleMoas = useMemo(() => {
+  // Filter moas for the overview table and stats
+  // We strictly show non-deleted records in the overview for all roles to ensure card accuracy
+  const activeInstitutionalMoas = useMemo(() => {
     if (!moas) return [];
-    
-    let filtered = moas;
-    
-    if (!search) return filtered;
-    const q = search.toLowerCase();
-    return filtered.filter(m => 
-      m.companyName.toLowerCase().includes(q) ||
-      m.college.toLowerCase().includes(q) ||
-      m.hteId.toLowerCase().includes(q) ||
-      m.industryType.toLowerCase().includes(q) ||
-      m.address.toLowerCase().includes(q)
-    );
-  }, [moas, search]);
+    return moas.filter(m => !m.isDeleted);
+  }, [moas]);
 
   const stats = useMemo(() => {
-    if (!moas) return [];
+    if (!activeInstitutionalMoas) return [];
     
-    const active = moas.filter(m => m.status?.startsWith('APPROVED')).length;
-    const processing = moas.filter(m => m.status?.startsWith('PROCESSING')).length;
+    const active = activeInstitutionalMoas.filter(m => m.status?.startsWith('APPROVED')).length;
+    const processing = activeInstitutionalMoas.filter(m => m.status?.startsWith('PROCESSING')).length;
     
-    const expiringSoon = moas.filter(m => {
+    const expiringSoon = activeInstitutionalMoas.filter(m => {
       if (!m.effectiveDate) return false;
+      // Standard university MOA 1-year duration check
       const expiry = new Date(m.effectiveDate);
       expiry.setFullYear(expiry.getFullYear() + 1); 
       const diffTime = expiry.getTime() - now.getTime();
@@ -86,7 +83,7 @@ export default function DashboardPage() {
       return diffDays > 0 && diffDays <= 60;
     }).length;
 
-    const expired = moas.filter(m => m.status === 'EXPIRED').length;
+    const expired = activeInstitutionalMoas.filter(m => m.status === 'EXPIRED').length;
 
     return [
       { title: 'Active Agreements', value: active, icon: CheckCircle2, color: 'bg-green-500' },
@@ -94,7 +91,21 @@ export default function DashboardPage() {
       { title: 'Expiring Soon', value: expiringSoon, icon: AlertTriangle, color: 'bg-orange-500' },
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
-  }, [moas, now]);
+  }, [activeInstitutionalMoas, now]);
+
+  const visibleMoas = useMemo(() => {
+    if (!activeInstitutionalMoas) return [];
+    
+    if (!search) return activeInstitutionalMoas;
+    const q = search.toLowerCase();
+    return activeInstitutionalMoas.filter(m => 
+      m.companyName.toLowerCase().includes(q) ||
+      m.college.toLowerCase().includes(q) ||
+      m.hteId.toLowerCase().includes(q) ||
+      m.industryType.toLowerCase().includes(q) ||
+      m.address.toLowerCase().includes(q)
+    );
+  }, [activeInstitutionalMoas, search]);
 
   const handleSeedData = async () => {
     if (!firestore || !user || !firebaseUser) return;
@@ -127,7 +138,7 @@ export default function DashboardPage() {
 
     try {
       await setDoc(ref, sampleMoa);
-      toast({ title: "Seeding Complete" });
+      toast({ title: "Seeding Complete", description: "Sample institutional agreement added." });
     } catch (err) {
       toast({ title: "Seeding Failed", variant: "destructive" });
     } finally {
@@ -195,7 +206,7 @@ export default function DashboardPage() {
         <div className="p-4 sm:p-6 border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h3 className="font-bold text-base sm:text-lg">Institutional Partnerships</h3>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">Showing authorized records matching your filter.</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Showing active records matching your institutional filter.</p>
           </div>
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -240,7 +251,7 @@ export default function DashboardPage() {
               )) : (
                 <tr>
                   <td colSpan={5} className="px-4 sm:px-6 py-12 text-center text-muted-foreground">
-                    {isMoaLoading ? "Synchronizing records..." : "No agreements found matching your criteria."}
+                    {isMoaLoading ? "Synchronizing records..." : "No active agreements found matching your criteria."}
                   </td>
                 </tr>
               )}
