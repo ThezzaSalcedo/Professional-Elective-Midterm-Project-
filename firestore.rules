@@ -8,6 +8,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Helper: Check if the email belongs to the institutional domain
+    function isInstitutionalEmail() {
+      return isSignedIn() && request.auth.token.email.toLocaleLowerCase().endsWith('@neu.edu.ph');
+    }
+
     // Helper: Get user document
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
@@ -15,20 +20,20 @@ service cloud.firestore {
 
     // Helper: Check if user has a specific role
     function hasRole(role) {
-      return isSignedIn() && getUserData().role == role;
+      return isSignedIn() && isInstitutionalEmail() && getUserData().role == role;
     }
 
     // Helper: Check if user is blocked
     function isNotBlocked() {
-      return isSignedIn() && getUserData().isBlocked == false;
+      return isSignedIn() && isInstitutionalEmail() && getUserData().isBlocked == false;
     }
 
     match /users/{userId} {
       // Allow users to read their own profile, or admins to read any profile
-      allow read: if isSignedIn() && (request.auth.uid == userId || hasRole('admin'));
+      allow read: if isSignedIn() && isInstitutionalEmail() && (request.auth.uid == userId || hasRole('admin'));
       
       // Allow users to create their own profile during signup, or admins to register new institutional users
-      allow create: if isSignedIn() && (request.auth.uid == userId || hasRole('admin'));
+      allow create: if isSignedIn() && isInstitutionalEmail() && (request.auth.uid == userId || hasRole('admin'));
       
       // Only admins can modify or delete institutional profiles
       allow update: if hasRole('admin');
@@ -39,7 +44,7 @@ service cloud.firestore {
       // Visibility logic: 
       // Admins/Faculty see all active records.
       // Students strictly see only approved, non-deleted records.
-      allow list, get: if isSignedIn() && isNotBlocked() && (
+      allow list, get: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
         (hasRole('student') && 
@@ -49,27 +54,27 @@ service cloud.firestore {
       );
 
       // Creation requires institutional right (Admin or authorized Faculty)
-      allow create: if isSignedIn() && isNotBlocked() && (
+      allow create: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canAddMoa == true)
       );
 
       // Updating (including soft delete) requires institutional right
-      allow update: if isSignedIn() && isNotBlocked() && (
+      allow update: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canEditMoa == true)
       );
 
       // Hard delete restricted to administrative purging
-      allow delete: if isSignedIn() && isNotBlocked() && (
+      allow delete: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canDeleteMoa == true)
       );
     }
 
     match /audit_logs/{logId} {
-      allow read: if isSignedIn() && hasRole('admin');
-      allow create: if isSignedIn() && isNotBlocked();
+      allow read: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
+      allow create: if isSignedIn() && isInstitutionalEmail() && isNotBlocked();
     }
   }
 }

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, AlertCircle, KeyRound } from 'lucide-react';
+import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -42,6 +42,12 @@ export default function HomePage() {
 
   const createProfile = async (uid: string, userEmail: string, name: string) => {
     const lowerEmail = userEmail.toLowerCase();
+    
+    // Safety check: ensure domain is correct before DB write
+    if (!lowerEmail.endsWith('@neu.edu.ph')) {
+      throw new Error("Access Denied: Please use your @neu.edu.ph institutional account.");
+    }
+
     let roleName: 'admin' | 'faculty' | 'student' = 'student';
 
     if (lowerEmail.includes('admin')) {
@@ -129,7 +135,7 @@ export default function HomePage() {
       await createProfile(firebaseUser.uid, firebaseUser.email!, fullName);
     } catch (err: any) {
       setIsProcessing(false);
-      setErrorMessage("Failed to save profile.");
+      setErrorMessage(err.message || "Failed to save profile.");
     }
   };
 

@@ -4,8 +4,9 @@
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
 import { Firestore, doc, getDoc, setDoc } from 'firebase/firestore';
-import { Auth, User, onAuthStateChanged } from 'firebase/auth';
+import { Auth, User, onAuthStateChanged, signOut } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
+import { useRouter } from 'next/navigation';
 
 interface FirebaseProviderProps {
   children: ReactNode;
@@ -57,6 +58,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
   firestore,
   auth,
 }) => {
+  const router = useRouter();
   const [userAuthState, setUserAuthState] = useState<UserAuthState>({
     user: null,
     isUserLoading: true,
@@ -74,32 +76,43 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       auth,
       async (firebaseUser) => {
         if (firebaseUser) {
+          // Strict Domain Guard: Immediately sign out if not using the institutional domain
+          const email = firebaseUser.email?.toLowerCase() || '';
+          if (!email.endsWith('@neu.edu.ph')) {
+            await signOut(auth);
+            setUserAuthState({ 
+              user: null, 
+              isUserLoading: false, 
+              isProfileLoading: false, 
+              userError: new Error("Access Denied: Please use your @neu.edu.ph institutional account.") 
+            });
+            router.push('/restricted');
+            return;
+          }
+
           setUserAuthState(prev => ({ ...prev, user: firebaseUser, isUserLoading: false, isProfileLoading: true }));
           
           const userRef = doc(firestore, 'users', firebaseUser.uid);
           try {
             const docSnap = await getDoc(userRef);
             if (!docSnap.exists()) {
-              const email = firebaseUser.email || '';
-              // Sequential Profile Creation: Ensure every institutional user has a DB entry for rules
-              if (email.toLowerCase().endsWith('@neu.edu.ph')) {
-                let roleName = 'student';
-                const lowerEmail = email.toLowerCase();
-                if (lowerEmail.includes('admin')) roleName = 'admin';
-                else if (lowerEmail.includes('faculty')) roleName = 'faculty';
+              // Sequential Profile Creation: Ensure every institutional user has a DB entry
+              let roleName = 'student';
+              const lowerEmail = email.toLowerCase();
+              if (lowerEmail.includes('admin')) roleName = 'admin';
+              else if (lowerEmail.includes('faculty')) roleName = 'faculty';
 
-                await setDoc(userRef, {
-                  id: firebaseUser.uid,
-                  email: email,
-                  fullName: firebaseUser.displayName || 'Institutional User',
-                  role: roleName,
-                  canAddMoa: roleName !== 'student',
-                  canEditMoa: roleName !== 'student',
-                  canDeleteMoa: roleName === 'admin',
-                  isBlocked: false,
-                  createdAt: new Date().toISOString()
-                });
-              }
+              await setDoc(userRef, {
+                id: firebaseUser.uid,
+                email: email,
+                fullName: firebaseUser.displayName || 'Institutional User',
+                role: roleName,
+                canAddMoa: roleName !== 'student',
+                canEditMoa: roleName !== 'student',
+                canDeleteMoa: roleName === 'admin',
+                isBlocked: false,
+                createdAt: new Date().toISOString()
+              });
             }
           } catch (err) {
             console.error("FirebaseProvider: Profile synchronization error:", err);
@@ -115,7 +128,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       }
     );
     return () => unsubscribe();
-  }, [auth, firestore]);
+  }, [auth, firestore, router]);
 
   const contextValue = useMemo((): FirebaseContextState => {
     const servicesAvailable = !!(firebaseApp && firestore && auth);
