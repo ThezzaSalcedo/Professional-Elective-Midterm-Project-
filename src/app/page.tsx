@@ -168,8 +168,8 @@ export default function HomePage() {
       {/* Main Login Card - High-end Glassmorphism */}
       <div className="relative z-10 max-w-md w-full bg-white/80 backdrop-blur-[15px] rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-8 sm:p-10 border border-white/40 animate-in fade-in zoom-in duration-700">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#0f172a]">NEU Library</h1>
-          <p className="text-[#004d00] font-black text-xs uppercase tracking-[0.2em] mt-2">MOA Portal</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#0f172a]">NEU MOA</h1>
+          <p className="text-[#004d00] font-black text-xs uppercase tracking-[0.2em] mt-2">PORTAL</p>
         </div>
 
         {errorMessage && (
