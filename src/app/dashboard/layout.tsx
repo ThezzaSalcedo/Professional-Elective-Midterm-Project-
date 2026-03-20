@@ -1,13 +1,14 @@
-
 "use client"
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { Sidebar } from '@/components/dashboard/Sidebar';
-import { Loader2, ShieldAlert, Menu, ShieldX } from 'lucide-react';
+import { ShieldX, Menu, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+
+const NEU_LOGO_URL = "https://upload.wikimedia.org/wikipedia/en/c/c6/New_Era_University.svg";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
@@ -16,13 +17,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // If not loading and no user session, return to landing
     if (!isLoading && !user) {
       router.push('/');
       return;
     }
 
-    // Role-based route guard: Triggered instantly on role changes via AuthContext listener
     if (!isLoading && user) {
       const isAdminRoute = pathname.startsWith('/dashboard/admin');
       if (isAdminRoute && user.role !== 'admin') {
@@ -31,21 +30,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user, isLoading, router, pathname]);
 
-  // Close mobile navigation on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
   if (isLoading) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground font-medium animate-pulse">Synchronizing Profile...</p>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-white">
+        <div className="relative">
+          <div className="absolute -inset-8 bg-primary/5 blur-3xl rounded-full" />
+          <img 
+            src={NEU_LOGO_URL} 
+            alt="NEU Logo" 
+            className="w-24 h-24 sm:w-32 sm:h-32 animate-institutional-pulse relative"
+          />
+        </div>
+        <div className="mt-12 flex flex-col items-center space-y-2">
+          <p className="text-primary font-black uppercase tracking-[0.3em] text-xs animate-pulse">Synchronizing Registry</p>
+          <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary animate-[loading-bar_1.5s_infinite_ease-in-out]" style={{ width: '40%' }} />
+          </div>
+        </div>
+        <style jsx>{`
+          @keyframes loading-bar {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(250%); }
+          }
+        `}</style>
       </div>
     );
   }
 
-  // Handle account suspensions in real-time
   if (user?.isBlocked) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-muted/30 p-4 text-center">
@@ -68,12 +83,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-background overflow-hidden relative">
-      {/* Desktop Navigation */}
       <div className="hidden lg:block">
         <Sidebar />
       </div>
 
-      {/* Mobile Navigation */}
       <div className="lg:hidden">
         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetContent side="left" className="p-0 w-64 border-none">
@@ -87,13 +100,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile App Header */}
         <header className="lg:hidden h-16 border-b bg-white flex items-center justify-between px-4 shrink-0 shadow-sm">
           <div className="flex items-center gap-2">
-            <div className="bg-primary p-1 rounded-md">
-              <ShieldAlert className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-primary tracking-tight">MOA Track</span>
+            <img src={NEU_LOGO_URL} alt="NEU Logo" className="w-8 h-8" />
+            <span className="font-black text-primary tracking-tighter uppercase text-sm">MOA Management</span>
           </div>
           <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(true)}>
             <Menu className="w-6 h-6" />
