@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoadingProfile(true);
         const docRef = doc(firestore, 'users', firebaseUser.uid);
         
-        // Real-time listener ensures role and permission changes are reflected immediately
+        // Real-time listener ensures role, permission, and block changes are reflected immediately
         unsubscribe = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setIsLoadingProfile(false);
         }, (error) => {
-          console.error("AuthContext: Profile sync error", error);
+          console.error("AuthContext: Profile synchronization error", error);
           setIsLoadingProfile(false);
         });
       } else {

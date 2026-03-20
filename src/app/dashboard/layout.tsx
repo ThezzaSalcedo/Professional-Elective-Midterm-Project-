@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { Sidebar } from '@/components/dashboard/Sidebar';
-import { Loader2, ShieldAlert, Menu, X, ShieldX } from 'lucide-react';
+import { Loader2, ShieldAlert, Menu, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 

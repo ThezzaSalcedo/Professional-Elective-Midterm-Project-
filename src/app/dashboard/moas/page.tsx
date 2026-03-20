@@ -12,7 +12,6 @@ import {
   RotateCcw, 
   Trash2, 
   Loader2, 
-  AlertCircle,
   FileText,
   Building2,
   Calendar,
@@ -20,7 +19,6 @@ import {
   User,
   MapPin,
   History,
-  Database,
   Plus,
   Edit2,
   Sparkles,
@@ -30,7 +28,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
@@ -51,7 +48,7 @@ export default function MoaListPage() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Dynamic query re-subscription based on real-time user role updates
+  // Dynamic real-time query based on user role
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
@@ -70,9 +67,10 @@ export default function MoaListPage() {
     
     // Faculty see all active records
     return query(base, where('isDeleted', '==', false));
-  }, [firestore, user?.role, user?.id]); // Re-run when role changes
+  }, [firestore, user?.role, user?.id]);
 
-  const { data: moas, isLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
+  // useMoaCollection handles the real-time onSnapshot synchronization
+  const { data: moas, isLoading, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
   const filteredMoas = useMemo(() => {
     if (!moas) return [];
@@ -167,7 +165,7 @@ export default function MoaListPage() {
 
     updateDoc(ref, finalUpdate)
       .then(() => {
-        toast({ title: "Agreement Updated", description: "Changes synchronized." });
+        toast({ title: "Agreement Updated", description: "Changes synchronized in real-time." });
         setEditMoa(null);
       })
       .catch(async (err) => {
@@ -196,7 +194,7 @@ export default function MoaListPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-primary">MOA Management</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Institutional repository for partnership agreements.
+            Institutional repository for partnership agreements. Changes are pushed in real-time.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
