@@ -10,16 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, AlertCircle, GraduationCap } from 'lucide-react';
+import { GraduationCap, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { doc, setDoc } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { cn } from '@/lib/utils';
 
 export default function HomePage() {
-  const { user, firebaseUser, isLoading: isAuthLoading, logout } = useAuth();
+  const { user, isAuthLoading } = useAuth();
   const { auth, firestore } = useFirebase();
   const { toast } = useToast();
   const router = useRouter();
@@ -109,7 +108,6 @@ export default function HomePage() {
   };
 
   const handleGoogleLogin = async () => {
-    // If they typed an email, check it first as a hint
     if (email && !validateDomain(email)) return;
 
     setIsProcessing(true);
@@ -144,42 +142,43 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
-      {/* Background Layer with NEU Theme */}
+      {/* Background Layer (NEU Campus) */}
       <div 
         className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{ 
-          backgroundImage: 'url("https://images.unsplash.com/photo-1541339907198-e08756ebafe3?q=80&w=2070&auto=format&fit=crop")',
-          filter: 'blur(10px) brightness(0.6)'
+          backgroundImage: 'url("https://media.licdn.com/dms/image/v2/C4E1BAQF0X2-Pil2iag/company-background_10000/company-background_10000/0/1645461279672/new_era_university_qc_main_cover?e=2147483647&v=beta&t=W6qIZJWlKZS6mWA4ozpu_7zSMtSnOtt9Myf64qdMYUA")',
+          filter: 'blur(10px) brightness(0.7)',
+          backgroundAttachment: 'fixed'
         }}
       />
 
-      {/* Main Login Card - Glassmorphism */}
-      <div className="relative z-10 max-w-md w-full bg-white/80 backdrop-blur-[15px] rounded-[2.5rem] shadow-2xl p-8 border border-white/20 animate-in fade-in zoom-in duration-500">
+      {/* Main Login Card - High-end Glassmorphism */}
+      <div className="relative z-10 max-w-md w-full bg-white/80 backdrop-blur-[15px] rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-8 sm:p-10 border border-white/40 animate-in fade-in zoom-in duration-700">
         <div className="text-center mb-10">
-          <div className="w-20 h-20 bg-[#800000] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl transform -rotate-3 hover:rotate-0 transition-transform duration-300">
+          <div className="w-20 h-20 bg-[#800000] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl transform hover:scale-105 transition-transform duration-300">
             <GraduationCap className="w-12 h-12 text-white" />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-[#0f172a]">NEU Library</h1>
-          <p className="text-[#004d00] font-bold text-sm uppercase tracking-widest mt-1">MOA Portal</p>
+          <p className="text-[#004d00] font-black text-xs uppercase tracking-[0.2em] mt-2">MOA Portal</p>
         </div>
 
         {errorMessage && (
-          <Alert variant="destructive" className="mb-6 bg-red-50 border-red-200">
+          <Alert variant="destructive" className="mb-6 bg-red-50/80 border-red-200 backdrop-blur-sm">
             <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-700 font-medium">{errorMessage}</AlertDescription>
+            <AlertDescription className="text-red-700 font-bold text-sm leading-tight">{errorMessage}</AlertDescription>
           </Alert>
         )}
 
         <Tabs defaultValue="login" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8 bg-muted/50 p-1 rounded-xl">
-            <TabsTrigger value="login" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-[#800000]">Sign In</TabsTrigger>
-            <TabsTrigger value="signup" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-[#800000]">Register</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-8 bg-black/5 p-1 rounded-2xl">
+            <TabsTrigger value="login" className="rounded-xl font-bold transition-all data-[state=active]:bg-white data-[state=active]:text-[#800000] data-[state=active]:shadow-lg">Sign In</TabsTrigger>
+            <TabsTrigger value="signup" className="rounded-xl font-bold transition-all data-[state=active]:bg-white data-[state=active]:text-[#004d00] data-[state=active]:shadow-lg">Register</TabsTrigger>
           </TabsList>
 
           <TabsContent value="login">
             <form onSubmit={handleEmailLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Institutional Email</Label>
+                <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Institutional Email</Label>
                 <Input 
                   id="email" 
                   type="email" 
@@ -187,13 +186,13 @@ export default function HomePage() {
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)} 
                   placeholder="name@neu.edu.ph" 
-                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000] transition-all"
+                  className="h-12 rounded-xl bg-white/60 border-white/50 focus-visible:ring-[#800000] focus-visible:bg-white transition-all text-sm font-medium"
                 />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between ml-1">
-                  <Label htmlFor="password" title="Password must be institutional" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Password</Label>
-                  <button type="button" onClick={handleForgotPassword} className="text-[10px] font-black uppercase text-[#800000] hover:underline">Forgot?</button>
+                  <Label htmlFor="password" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Security Password</Label>
+                  <button type="button" onClick={handleForgotPassword} className="text-[10px] font-black uppercase text-[#800000] hover:underline decoration-2 underline-offset-4">Reset Credentials</button>
                 </div>
                 <Input 
                   id="password" 
@@ -201,11 +200,11 @@ export default function HomePage() {
                   required 
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)} 
-                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000] transition-all"
+                  className="h-12 rounded-xl bg-white/60 border-white/50 focus-visible:ring-[#800000] focus-visible:bg-white transition-all"
                 />
               </div>
-              <Button type="submit" className="w-full h-12 rounded-xl bg-[#800000] hover:bg-[#600000] font-bold text-base shadow-lg transition-all" disabled={isProcessing}>
-                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Access Portal"}
+              <Button type="submit" className="w-full h-12 rounded-xl bg-[#800000] hover:bg-[#600000] font-bold text-sm uppercase tracking-widest shadow-xl transition-all hover:shadow-[#800000]/20" disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Access System"}
               </Button>
             </form>
           </TabsContent>
@@ -213,53 +212,54 @@ export default function HomePage() {
           <TabsContent value="signup">
             <form onSubmit={handleEmailSignUp} className="space-y-5">
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Full Legal Name</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Full Legal Name</Label>
                 <Input 
                   required 
                   value={fullName} 
                   onChange={(e) => setFullName(e.target.value)} 
                   placeholder="e.g. Juan Dela Cruz" 
-                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000]"
+                  className="h-12 rounded-xl bg-white/60 border-white/50 focus-visible:ring-[#004d00] focus-visible:bg-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Institutional Email</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Official NEU Email</Label>
                 <Input 
                   type="email" 
                   required 
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)} 
                   placeholder="name@neu.edu.ph" 
-                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000]"
+                  className="h-12 rounded-xl bg-white/60 border-white/50 focus-visible:ring-[#004d00] focus-visible:bg-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Set Password</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Create Password</Label>
                 <Input 
                   type="password" 
                   required 
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)} 
-                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000]"
+                  className="h-12 rounded-xl bg-white/60 border-white/50 focus-visible:ring-[#004d00] focus-visible:bg-white"
                 />
               </div>
-              <Button type="submit" className="w-full h-12 rounded-xl bg-[#004d00] hover:bg-[#003300] font-bold text-base shadow-lg" disabled={isProcessing}>
-                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Create Account"}
+              <Button type="submit" className="w-full h-12 rounded-xl bg-[#004d00] hover:bg-[#003300] font-bold text-sm uppercase tracking-widest shadow-xl transition-all hover:shadow-[#004d00]/20" disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Initialize Account"}
               </Button>
             </form>
           </TabsContent>
         </Tabs>
 
         <div className="relative my-10">
-          <Separator className="bg-muted-foreground/20" />
-          <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent px-4 text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Institutional Access</span>
+          <Separator className="bg-black/10" />
+          <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent px-4 text-[9px] font-black uppercase text-muted-foreground tracking-[0.3em] whitespace-nowrap">Institutional SSO</span>
         </div>
 
         <Button 
           variant="outline" 
-          className="w-full h-12 rounded-xl gap-3 border-muted-foreground/20 bg-white/50 hover:bg-white font-bold transition-all shadow-sm" 
+          className="w-full h-12 rounded-xl gap-3 border-white/50 bg-white/40 hover:bg-white font-bold transition-all shadow-sm group" 
           onClick={handleGoogleLogin} 
           disabled={isProcessing}
+          title="Strictly @neu.edu.ph institutional accounts only."
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -267,11 +267,11 @@ export default function HomePage() {
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
           </svg>
-          Google Institutional Login
+          <span className="group-hover:text-[#800000] transition-colors">Sign In with NEU Account</span>
         </Button>
         
-        <p className="mt-8 text-center text-[10px] text-muted-foreground/60 font-medium tracking-tight leading-relaxed">
-          BY ACCESSING THIS PORTAL, YOU AGREE TO THE UNIVERSITY'S DATA PRIVACY POLICY AND ACCEPT RESPONSIBILITY FOR INSTITUTIONAL DATA INTEGRITY.
+        <p className="mt-8 text-center text-[9px] text-muted-foreground/80 font-bold tracking-tight leading-relaxed uppercase">
+          Unauthorized access is strictly prohibited. All sessions are monitored for institutional security compliance.
         </p>
       </div>
     </div>
