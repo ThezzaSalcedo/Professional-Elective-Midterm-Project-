@@ -84,7 +84,7 @@ export default function MoaListPage() {
     const ref = doc(firestore, 'moas', id);
     const audit: AuditEntry = {
       userId: firebaseUser.uid,
-      userName: user.name,
+      userName: user.fullName || 'User',
       operation: 'SOFT-DELETE',
       timestamp: new Date().toISOString()
     };
@@ -101,7 +101,7 @@ export default function MoaListPage() {
     const ref = doc(firestore, 'moas', id);
     const audit: AuditEntry = {
       userId: firebaseUser.uid,
-      userName: user.name,
+      userName: user.fullName || 'User',
       operation: 'RECOVER',
       timestamp: new Date().toISOString()
     };
@@ -285,7 +285,7 @@ export default function MoaListPage() {
                         </DialogContent>
                       </Dialog>
 
-                      {(user?.role === 'admin' || (user?.role === 'faculty' && user.canEdit)) && !m.isDeleted && (
+                      {user?.canDeleteMoa && !m.isDeleted && (
                         <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-8 w-8" onClick={() => handleSoftDelete(m.id)} title="Soft Delete"><Trash2 className="w-4 h-4" /></Button>
                       )}
 

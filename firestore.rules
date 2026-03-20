@@ -32,7 +32,6 @@ service cloud.firestore {
 
     match /moas/{moaId} {
       // Students see only APPROVED active records. 
-      // Query must include where('isDeleted', '==', false) and status range.
       allow list, get: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
@@ -42,13 +41,23 @@ service cloud.firestore {
          resource.data.status < 'APPROVEE')
       );
 
-      // Writes restricted to admin or authorized faculty
-      allow create: if isSignedIn() && isNotBlocked() && (hasRole('admin') || hasRole('faculty'));
+      // Creation requires institutional right
+      allow create: if isSignedIn() && isNotBlocked() && (
+        hasRole('admin') || 
+        (hasRole('faculty') && getUserData().canAddMoa == true)
+      );
+
+      // Updating (including soft delete) requires institutional right
       allow update: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canEditMoa == true)
       );
-      allow delete: if false; // Soft-delete only
+
+      // Hard delete restricted to Manager/Admin via soft-delete logic
+      allow delete: if isSignedIn() && isNotBlocked() && (
+        hasRole('admin') || 
+        (hasRole('faculty') && getUserData().canDeleteMoa == true)
+      );
     }
 
     match /audit_logs/{logId} {

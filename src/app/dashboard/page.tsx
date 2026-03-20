@@ -43,7 +43,6 @@ export default function DashboardPage() {
     if (user.role === 'admin') return base;
     
     if (user.role === 'student') {
-      // Students MUST query with specific filters to satisfy security rules
       return query(base, 
         where('isDeleted', '==', false),
         where('status', '>=', 'APPROVED'),
@@ -51,7 +50,6 @@ export default function DashboardPage() {
       );
     }
     
-    // Faculty sees all non-deleted records
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user]);
 
@@ -61,8 +59,6 @@ export default function DashboardPage() {
     if (!moas) return [];
     
     let filtered = moas;
-    // Query already filters for students, so no extra status check needed here
-    // but we can keep it for extra safety.
     
     if (!search) return filtered;
     const q = search.toLowerCase();
@@ -103,38 +99,34 @@ export default function DashboardPage() {
   const handleSeedData = async () => {
     if (!firestore || !user || !firebaseUser) return;
     setIsSeeding(true);
-    const sampleMoas = [
-      {
-        hteId: 'HTE-2024-001',
-        companyName: 'Global Technology Solutions',
-        address: '123 Innovation Way, Makati City',
-        contactPerson: 'Maria Rodriguez',
-        contactEmail: 'm.rodriguez@globaltech.com',
-        industryType: 'Technology',
-        effectiveDate: new Date().toISOString(),
-        college: 'College of Computer Studies',
-        status: 'APPROVED: Signed by President',
-        isDeleted: false,
-      }
-    ];
+    const id = Math.random().toString(36).substr(2, 9);
+    const ref = doc(firestore, 'moas', id);
+    const audit: AuditEntry = {
+      userId: firebaseUser.uid,
+      userName: user.fullName || 'User',
+      operation: 'INSERT',
+      timestamp: new Date().toISOString()
+    };
+    
+    const sampleMoa = {
+      id,
+      hteId: 'HTE-2024-001',
+      companyName: 'Global Technology Solutions',
+      address: '123 Innovation Way, Makati City',
+      contactPerson: 'Maria Rodriguez',
+      contactEmail: 'm.rodriguez@globaltech.com',
+      industryType: 'Technology',
+      effectiveDate: new Date().toISOString(),
+      college: 'College of Computer Studies',
+      status: 'APPROVED: Signed by President',
+      isDeleted: false,
+      auditTrail: [audit],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
     try {
-      for (const item of sampleMoas) {
-        const id = Math.random().toString(36).substr(2, 9);
-        const ref = doc(firestore, 'moas', id);
-        const audit: AuditEntry = {
-          userId: firebaseUser.uid,
-          userName: user.name,
-          operation: 'INSERT',
-          timestamp: new Date().toISOString()
-        };
-        await setDoc(ref, {
-          ...item,
-          id,
-          auditTrail: [audit],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      }
+      await setDoc(ref, sampleMoa);
       toast({ title: "Seeding Complete" });
     } catch (err) {
       toast({ title: "Seeding Failed", variant: "destructive" });
@@ -167,7 +159,7 @@ export default function DashboardPage() {
               {isSeeding ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Seed Registry"}
             </Button>
           )}
-          {user?.role !== 'student' && (
+          {user?.canAddMoa && (
             <Button asChild size="sm">
               <Link href="/dashboard/moas/new">Create Agreement</Link>
             </Button>

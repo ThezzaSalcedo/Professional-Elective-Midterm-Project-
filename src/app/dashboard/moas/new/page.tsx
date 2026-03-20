@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase } from '@/firebase';
@@ -13,14 +13,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { MOAStatus, AuditEntry } from '@/app/lib/types';
-import { Loader2, Sparkles, ChevronLeft } from 'lucide-react';
+import { Loader2, Sparkles, ChevronLeft, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import Link from 'next/link';
 
 export default function NewMoaPage() {
-  const { user, firebaseUser } = useAuth();
+  const { user, firebaseUser, isLoading } = useAuth();
   const { firestore } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
@@ -38,6 +38,12 @@ export default function NewMoaPage() {
     college: '',
     status: 'PROCESSING: Awaiting signature' as MOAStatus
   });
+
+  useEffect(() => {
+    if (!isLoading && user && !user.canAddMoa) {
+      router.push('/dashboard');
+    }
+  }, [user, isLoading, router]);
 
   const handleClassify = async () => {
     if (!formData.companyName) {
@@ -67,7 +73,7 @@ export default function NewMoaPage() {
 
     const auditEntry: AuditEntry = {
       userId: firebaseUser.uid,
-      userName: user.name,
+      userName: user.fullName || 'User',
       timestamp: new Date().toISOString(),
       operation: 'INSERT'
     };
@@ -96,6 +102,28 @@ export default function NewMoaPage() {
       })
       .finally(() => setIsSubmitting(false));
   };
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-20">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Verifying institutional rights...</p>
+      </div>
+    );
+  }
+
+  if (!user?.canAddMoa) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-12">
+        <ShieldAlert className="w-16 h-16 text-muted-foreground opacity-20 mb-4" />
+        <h2 className="text-xl font-bold">Rights Restricted</h2>
+        <p className="text-muted-foreground max-w-sm text-sm">You do not have the institutional rights required to create new partnership agreements.</p>
+        <Button asChild className="mt-6" variant="outline">
+          <Link href="/dashboard">Return to Dashboard</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto py-4 sm:py-8">
