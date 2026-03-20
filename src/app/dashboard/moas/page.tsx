@@ -5,7 +5,7 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase, useMoaCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc } from 'firebase/firestore';
 import { 
   Search, 
   Eye, 
@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { MOA, AuditEntry, MOAStatus } from '@/app/lib/types';
+import { MOA, AuditEntry, MOAStatus, SystemLog } from '@/app/lib/types';
 import { classifyMoaIndustry } from '@/ai/flows/moa-industry-classifier';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -50,16 +50,10 @@ export default function MoaListPage() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Dynamic real-time query based strictly on user role and visibility rules
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
-    
-    // Admins see all records for full oversight
     if (user.role === 'admin') return base;
-    
-    // Students see strictly approved, non-deleted records. 
-    // This range captures all strings prefixed with "APPROVED"
     if (user.role === 'student') {
       return query(base, 
         where('isDeleted', '==', false), 
@@ -67,25 +61,18 @@ export default function MoaListPage() {
         where('status', '<', 'APPROVEE')
       );
     }
-    
-    // Faculty see all active institutional records
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user?.role, user?.id]);
 
-  // useMoaCollection handles the real-time onSnapshot synchronization
   const { data: moas, isLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
   const filteredMoas = useMemo(() => {
     if (!moas) return [];
-    
     let result = moas;
-
-    // Admin view can filter between active and trash
     if (user?.role === 'admin') {
       if (activeTab === 'active') result = result.filter(m => !m.isDeleted);
       if (activeTab === 'trash') result = result.filter(m => m.isDeleted);
     }
-
     const q = search.toLowerCase();
     return result.filter(m => 
       m.companyName.toLowerCase().includes(q) ||
@@ -97,38 +84,58 @@ export default function MoaListPage() {
     );
   }, [moas, search, activeTab, user?.role]);
 
-  const handleSoftDelete = async (id: string) => {
+  const logOperation = async (operation: SystemLog['operation'], moa: MOA, details?: string) => {
     if (!firestore || !user || !firebaseUser) return;
-    const ref = doc(firestore, 'moas', id);
+    const logRef = collection(firestore, 'audit_logs');
+    const logData: Omit<SystemLog, 'id'> = {
+      userId: firebaseUser.uid,
+      userName: user.fullName || 'User',
+      operation,
+      targetId: moa.id,
+      targetName: moa.companyName,
+      hteId: moa.hteId,
+      timestamp: new Date().toISOString(),
+      details
+    };
+    addDoc(logRef, logData);
+  };
+
+  const handleSoftDelete = async (moa: MOA) => {
+    if (!firestore || !user || !firebaseUser) return;
+    const ref = doc(firestore, 'moas', moa.id);
+    const timestamp = new Date().toISOString();
     const audit: AuditEntry = {
       userId: firebaseUser.uid,
       userName: user.fullName || 'User',
       operation: 'SOFT-DELETE',
-      timestamp: new Date().toISOString()
+      timestamp
     };
     updateDoc(ref, { 
       isDeleted: true, 
-      deletedAt: new Date().toISOString(),
+      deletedAt: timestamp,
       auditTrail: arrayUnion(audit),
-      updatedAt: new Date().toISOString()
+      updatedAt: timestamp
     });
+    logOperation('SOFT-DELETE', moa, "Agreement moved to institutional trash.");
     toast({ title: "Record moved to trash" });
   };
 
-  const handleRecover = async (id: string) => {
+  const handleRecover = async (moa: MOA) => {
     if (!firestore || !user || !firebaseUser) return;
-    const ref = doc(firestore, 'moas', id);
+    const ref = doc(firestore, 'moas', moa.id);
+    const timestamp = new Date().toISOString();
     const audit: AuditEntry = {
       userId: firebaseUser.uid,
       userName: user.fullName || 'User',
       operation: 'RECOVER',
-      timestamp: new Date().toISOString()
+      timestamp
     };
     updateDoc(ref, { 
       isDeleted: false, 
       auditTrail: arrayUnion(audit),
-      updatedAt: new Date().toISOString()
+      updatedAt: timestamp
     });
+    logOperation('RECOVER', moa, "Agreement recovered from institutional trash.");
     toast({ title: "Record recovered" });
   };
 
@@ -152,25 +159,26 @@ export default function MoaListPage() {
     
     setIsUpdating(true);
     const ref = doc(firestore, 'moas', editMoa.id);
+    const timestamp = new Date().toISOString();
     const audit: AuditEntry = {
       userId: firebaseUser.uid,
       userName: user.fullName || 'User',
       operation: 'EDIT',
-      timestamp: new Date().toISOString()
+      timestamp
     };
 
     const { id, ...updateData } = editMoa;
-    // Ensure critical institutional fields are explicitly preserved or defaulted
     const finalUpdate = {
       ...updateData,
       isDeleted: editMoa.isDeleted ?? false,
       status: editMoa.status,
       auditTrail: arrayUnion(audit),
-      updatedAt: new Date().toISOString()
+      updatedAt: timestamp
     };
 
     updateDoc(ref, finalUpdate)
       .then(() => {
+        logOperation('EDIT', editMoa, `Updated agreement details for ${editMoa.companyName}.`);
         toast({ title: "Agreement Updated", description: "Changes synchronized in real-time." });
         setEditMoa(null);
       })
@@ -340,32 +348,6 @@ export default function MoaListPage() {
                                   </div>
                                 </div>
                               </div>
-                              
-                              {user?.role === 'admin' && selectedMoa.auditTrail && (
-                                <div className="border-t pt-4 bg-muted/20 p-4 rounded-lg">
-                                  <div className="flex items-center gap-2 font-bold mb-4 text-primary text-[11px] uppercase tracking-tight">
-                                    <History className="w-4 h-4" /> System Audit Trail
-                                  </div>
-                                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                                    {selectedMoa.auditTrail.map((a, i) => (
-                                      <div key={i} className="flex justify-between items-center text-[11px] p-2 bg-white rounded border border-border/50 shadow-sm">
-                                        <div className="flex flex-col">
-                                          <span className="font-bold text-foreground truncate max-w-[120px]">{a.userName}</span>
-                                          <span className="text-[9px] text-muted-foreground italic">{new Date(a.timestamp).toLocaleString()}</span>
-                                        </div>
-                                        <span className={cn(
-                                          "px-2 py-0.5 rounded font-black text-[9px] uppercase shrink-0",
-                                          a.operation === 'INSERT' ? "bg-green-100 text-green-700" :
-                                          a.operation === 'EDIT' ? "bg-blue-100 text-blue-700" :
-                                          a.operation === 'SOFT-DELETE' ? "bg-red-100 text-red-700" : "bg-muted text-muted-foreground"
-                                        )}>
-                                          {a.operation}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           )}
                         </DialogContent>
@@ -476,11 +458,11 @@ export default function MoaListPage() {
                       )}
 
                       {user?.canDeleteMoa && !m.isDeleted && (
-                        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-8 w-8" onClick={() => handleSoftDelete(m.id)} title="Soft Delete"><Trash2 className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-8 w-8" onClick={() => handleSoftDelete(m)} title="Soft Delete"><Trash2 className="w-4 h-4" /></Button>
                       )}
 
                       {user?.role === 'admin' && m.isDeleted && (
-                        <Button variant="ghost" size="icon" className="text-green-600 hover:bg-green-50 h-8 w-8" onClick={() => handleRecover(m.id)} title="Recover Record"><RotateCcw className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="text-green-600 hover:bg-green-50 h-8 w-8" onClick={() => handleRecover(m)} title="Recover Record"><RotateCcw className="w-4 h-4" /></Button>
                       )}
                     </div>
                   </td>

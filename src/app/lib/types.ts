@@ -18,6 +18,18 @@ export type AuditEntry = {
   timestamp: string;
 };
 
+export type SystemLog = {
+  id: string;
+  userId: string;
+  userName: string;
+  operation: 'INSERT' | 'EDIT' | 'SOFT-DELETE' | 'RECOVER' | 'DELETE';
+  targetId: string;
+  targetName: string;
+  hteId: string;
+  timestamp: string;
+  details?: string;
+};
+
 export type MOA = {
   id: string;
   hteId: string;

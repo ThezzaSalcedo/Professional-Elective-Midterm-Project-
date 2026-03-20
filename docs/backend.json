@@ -51,6 +51,23 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "hteId", "companyName", "address", "contactPerson", "contactEmail", "industryType", "effectiveDate", "college", "status", "isDeleted", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "A persistent record of a system-wide operation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "operation": { "type": "string", "enum": ["INSERT", "EDIT", "SOFT-DELETE", "RECOVER", "DELETE"] },
+        "targetId": { "type": "string" },
+        "targetName": { "type": "string" },
+        "hteId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "userId", "userName", "operation", "targetId", "targetName", "timestamp"]
     }
   },
   "auth": {
@@ -64,6 +81,10 @@
     "/moas/{moaId}": {
       "schema": { "$ref": "#/backend/entities/Moa" },
       "description": "Institutional partnership records."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/backend/entities/AuditLog" },
+      "description": "Immutable system activity logs."
     }
   }
 }

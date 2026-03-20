@@ -5,14 +5,14 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase } from '@/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { classifyMoaIndustry } from '@/ai/flows/moa-industry-classifier';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
-import { MOAStatus, AuditEntry } from '@/app/lib/types';
+import { MOAStatus, AuditEntry, SystemLog } from '@/app/lib/types';
 import { Loader2, Sparkles, ChevronLeft, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -71,10 +71,11 @@ export default function NewMoaPage() {
     const moaId = Math.random().toString(36).substr(2, 9);
     const moaRef = doc(firestore, 'moas', moaId);
 
+    const timestamp = new Date().toISOString();
     const auditEntry: AuditEntry = {
       userId: firebaseUser.uid,
       userName: user.fullName || 'User',
-      timestamp: new Date().toISOString(),
+      timestamp,
       operation: 'INSERT'
     };
 
@@ -83,12 +84,27 @@ export default function NewMoaPage() {
       id: moaId,
       isDeleted: false,
       auditTrail: [auditEntry],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: timestamp,
+      updatedAt: timestamp
     };
 
+    // Prepare System Log
+    const logRef = collection(firestore, 'audit_logs');
+    const logData: Omit<SystemLog, 'id'> = {
+      userId: firebaseUser.uid,
+      userName: user.fullName || 'User',
+      operation: 'INSERT',
+      targetId: moaId,
+      targetName: formData.companyName,
+      hteId: formData.hteId,
+      timestamp,
+      details: `Initialized new institutional partnership for ${formData.companyName}.`
+    };
+
+    // Sequential writes for integrity
     setDoc(moaRef, finalData)
       .then(() => {
+        addDoc(logRef, logData);
         toast({ title: "Success", description: "MOA has been successfully added to the registry." });
         router.push('/dashboard/moas');
       })
