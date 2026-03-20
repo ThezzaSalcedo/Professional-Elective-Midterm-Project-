@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { MOAStatus, AuditEntry, SystemLog } from '@/app/lib/types';
-import { Loader2, Sparkles, ChevronLeft, ShieldAlert } from 'lucide-react';
+import { Loader2, Sparkles, ChevronLeft, ShieldAlert, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -35,6 +35,7 @@ export default function NewMoaPage() {
     contactEmail: '',
     industryType: '',
     effectiveDate: '',
+    expirationDate: '',
     college: '',
     status: 'PROCESSING: Awaiting signature' as MOAStatus
   });
@@ -152,7 +153,7 @@ export default function NewMoaPage() {
         <CardHeader className="bg-primary text-primary-foreground">
           <CardTitle className="text-xl sm:text-2xl flex items-center gap-3">
             <div className="bg-white/20 p-2 rounded-lg shrink-0">
-              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             New Partnership Agreement
           </CardTitle>
@@ -164,9 +165,15 @@ export default function NewMoaPage() {
                 <Label htmlFor="hteId">HTE ID</Label>
                 <Input id="hteId" placeholder="e.g. HTE-2024-001" required value={formData.hteId} onChange={e => setFormData({...formData, hteId: e.target.value})} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="effectiveDate">Effective Date</Label>
-                <Input id="effectiveDate" type="date" required value={formData.effectiveDate} onChange={e => setFormData({...formData, effectiveDate: e.target.value})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="effectiveDate">Effective Date</Label>
+                  <Input id="effectiveDate" type="date" required value={formData.effectiveDate} onChange={e => setFormData({...formData, effectiveDate: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="expirationDate">Expiration Date</Label>
+                  <Input id="expirationDate" type="date" required value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} />
+                </div>
               </div>
             </div>
 
@@ -195,6 +202,9 @@ export default function NewMoaPage() {
                     <SelectItem value="Technology">Technology</SelectItem>
                     <SelectItem value="Finance">Finance</SelectItem>
                     <SelectItem value="Education">Education</SelectItem>
+                    <SelectItem value="Healthcare">Healthcare</SelectItem>
+                    <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+                    <SelectItem value="Retail">Retail</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

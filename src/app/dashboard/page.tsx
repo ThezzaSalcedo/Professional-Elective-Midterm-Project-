@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { MOA, AuditEntry } from '../lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { differenceInDays, formatDistanceToNow } from 'date-fns';
 
 export default function DashboardPage() {
   const { user, firebaseUser, isLoading: isAuthLoading } = useAuth();
@@ -35,6 +36,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setNow(new Date());
+    const interval = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const moaQuery = useMemoFirebase(() => {
@@ -68,15 +71,16 @@ export default function DashboardPage() {
     const processing = activeInstitutionalMoas.filter(m => m.status?.startsWith('PROCESSING')).length;
     
     const expiringSoon = activeInstitutionalMoas.filter(m => {
-      if (!m.effectiveDate || !m.status?.startsWith('APPROVED')) return false;
-      const expiry = new Date(m.effectiveDate);
-      expiry.setFullYear(expiry.getFullYear() + 1); 
-      const diffTime = expiry.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays > 0 && diffDays <= 60;
+      if (!m.expirationDate || !m.status?.startsWith('APPROVED')) return false;
+      const expiry = new Date(m.expirationDate);
+      const daysLeft = differenceInDays(expiry, now);
+      return daysLeft >= 0 && daysLeft <= 60;
     }).length;
 
-    const expired = activeInstitutionalMoas.filter(m => m.status === 'EXPIRED').length;
+    const expired = activeInstitutionalMoas.filter(m => {
+      if (!m.expirationDate) return false;
+      return differenceInDays(new Date(m.expirationDate), now) < 0;
+    }).length;
 
     const allStats = [
       { title: 'Active Agreements', value: active, icon: CheckCircle2, color: 'bg-green-500' },
@@ -85,12 +89,10 @@ export default function DashboardPage() {
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
 
-    // Faculty requested to only see Active and In Process
     if (user?.role === 'faculty') {
       return allStats.slice(0, 2);
     }
 
-    // Students strictly see only authorized content, which usually only includes Approved anyway
     if (user?.role === 'student') {
       return allStats.filter(s => s.title === 'Active Agreements');
     }
@@ -106,8 +108,7 @@ export default function DashboardPage() {
       m.companyName.toLowerCase().includes(q) ||
       m.college.toLowerCase().includes(q) ||
       m.hteId.toLowerCase().includes(q) ||
-      m.industryType.toLowerCase().includes(q) ||
-      m.address.toLowerCase().includes(q)
+      m.industryType.toLowerCase().includes(q)
     );
   }, [activeInstitutionalMoas, search]);
 
@@ -121,6 +122,8 @@ export default function DashboardPage() {
       'APPROVED: No notarization needed'
     ];
 
+    const today = new Date();
+
     for (const status of statuses) {
       const id = Math.random().toString(36).substr(2, 9);
       const ref = doc(firestore, 'moas', id);
@@ -128,30 +131,39 @@ export default function DashboardPage() {
         userId: firebaseUser.uid,
         userName: user.fullName || 'User',
         operation: 'INSERT',
-        timestamp: new Date().toISOString()
+        timestamp: today.toISOString()
       };
+      
+      // Seed with different expiration windows
+      const expDate = new Date();
+      if (status.includes('Legal')) {
+        expDate.setMonth(expDate.getMonth() + 1); // Expiring soon
+      } else {
+        expDate.setFullYear(expDate.getFullYear() + 1); // Long term
+      }
       
       const sampleMoa = {
         id,
         hteId: `HTE-2024-${Math.floor(Math.random() * 1000)}`,
-        companyName: status.startsWith('APPROVED') ? 'Approved Partner Corp' : 'Pending Partner Inc',
+        companyName: status.startsWith('APPROVED') ? 'NEU Strategic Partner' : 'Prospective Entity Inc',
         address: 'Academic District, Quezon City',
         contactPerson: 'Institutional Liaison',
         contactEmail: 'liaison@partner.com',
         industryType: 'Education',
-        effectiveDate: new Date().toISOString(),
+        effectiveDate: today.toISOString(),
+        expirationDate: expDate.toISOString(),
         college: 'University Center',
         status: status,
         isDeleted: false,
         auditTrail: [audit],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: today.toISOString(),
+        updatedAt: today.toISOString()
       };
 
       await setDoc(ref, sampleMoa);
     }
     
-    toast({ title: "Registry Seeded", description: "Sample institutional agreements added for testing visibility." });
+    toast({ title: "Registry Seeded", description: "Sample institutional agreements with expiration dates added." });
     setIsSeeding(false);
   };
 
@@ -170,7 +182,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary">System Overview</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Institutional access for <span className="font-semibold text-primary capitalize">{user?.role}</span> account: <span className="font-bold">{user?.fullName}</span>.
+            Institutional access for <span className="font-semibold text-primary capitalize">{user?.role}</span>: <span className="font-bold">{user?.fullName}</span>.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -187,24 +199,6 @@ export default function DashboardPage() {
           )}
         </div>
       </header>
-
-      {error && (
-        <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" />
-          <AlertTitle>Security Warning</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-
-      {isIndexBuilding && (
-        <Alert className="bg-blue-50 border-blue-200">
-          <Database className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-800">Optimizing Database</AlertTitle>
-          <AlertDescription className="text-blue-700">
-            The dashboard is currently optimizing its database for your role. This may take a few minutes.
-          </AlertDescription>
-        </Alert>
-      )}
 
       <div className={cn(
         "grid gap-4 sm:gap-6",
@@ -223,8 +217,8 @@ export default function DashboardPage() {
             <h3 className="font-bold text-base sm:text-lg text-primary">Institutional Partnerships</h3>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
               {user?.role === 'student' 
-                ? "Visibility restricted to Approved partnerships only." 
-                : "Showing active institutional records matching your profile."
+                ? "Showing only Approved partnerships." 
+                : "Active institutional records with validity tracking."
               }
             </p>
           </div>
@@ -235,43 +229,61 @@ export default function DashboardPage() {
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm min-w-[600px]">
+          <table className="w-full text-xs sm:text-sm min-w-[650px]">
             <thead className="bg-muted/50 border-b">
               <tr>
                 <th className="px-4 sm:px-6 py-3 text-left font-semibold">Partner Company</th>
-                <th className="px-4 sm:px-6 py-3 text-left font-semibold">College</th>
+                <th className="px-4 sm:px-6 py-3 text-left font-semibold">Validity</th>
                 <th className="px-4 sm:px-6 py-3 text-left font-semibold">Industry</th>
                 <th className="px-4 sm:px-6 py-3 text-left font-semibold">Status</th>
                 <th className="px-4 sm:px-6 py-3 text-right w-16"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {visibleMoas.length > 0 ? visibleMoas.map(m => (
-                <tr key={m.id} className="hover:bg-muted/5 transition-colors">
-                  <td className="px-4 sm:px-6 py-4">
-                    <div className="font-semibold line-clamp-1">{m.companyName}</div>
-                    <div className="text-[10px] text-muted-foreground font-mono">{m.hteId}</div>
-                  </td>
-                  <td className="px-4 sm:px-6 py-4 text-xs font-medium">{m.college}</td>
-                  <td className="px-4 sm:px-6 py-4 text-xs uppercase text-muted-foreground font-semibold">{m.industryType}</td>
-                  <td className="px-4 sm:px-6 py-4">
-                    <span className={cn(
-                      "px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase whitespace-nowrap",
-                      m.status.startsWith('APPROVED') ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                    )}>
-                      {m.status.split(':')[0]}
-                    </span>
-                  </td>
-                  <td className="px-4 sm:px-6 py-4 text-right">
-                    <Button variant="ghost" size="sm" asChild className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary">
-                      <Link href="/dashboard/moas"><ArrowRight className="w-4 h-4" /></Link>
-                    </Button>
-                  </td>
-                </tr>
-              )) : (
+              {visibleMoas.length > 0 ? visibleMoas.map(m => {
+                const expiry = m.expirationDate ? new Date(m.expirationDate) : null;
+                const daysLeft = expiry ? differenceInDays(expiry, now) : null;
+                const isExpired = daysLeft !== null && daysLeft < 0;
+
+                return (
+                  <tr key={m.id} className="hover:bg-muted/5 transition-colors">
+                    <td className="px-4 sm:px-6 py-4">
+                      <div className="font-semibold line-clamp-1">{m.companyName}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">{m.hteId}</div>
+                    </td>
+                    <td className="px-4 sm:px-6 py-4">
+                      {expiry ? (
+                        <div className="flex flex-col">
+                          <span className="text-xs">{expiry.toLocaleDateString()}</span>
+                          <span className={cn(
+                            "text-[9px] font-bold uppercase",
+                            isExpired ? "text-destructive" : daysLeft! <= 60 ? "text-orange-500" : "text-green-600"
+                          )}>
+                            {isExpired ? "Expired" : `${formatDistanceToNow(expiry)} left`}
+                          </span>
+                        </div>
+                      ) : "N/A"}
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 text-xs uppercase text-muted-foreground font-semibold">{m.industryType}</td>
+                    <td className="px-4 sm:px-6 py-4">
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase whitespace-nowrap",
+                        m.status.startsWith('APPROVED') ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                      )}>
+                        {m.status.split(':')[0]}
+                      </span>
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 text-right">
+                      <Button variant="ghost" size="sm" asChild className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary">
+                        <Link href="/dashboard/moas"><ArrowRight className="w-4 h-4" /></Link>
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              }) : (
                 <tr>
                   <td colSpan={5} className="px-4 sm:px-6 py-12 text-center text-muted-foreground italic">
-                    {isMoaLoading ? "Synchronizing records..." : "No authorized agreements found matching your institutional filters."}
+                    {isMoaLoading ? "Synchronizing records..." : "No authorized agreements found."}
                   </td>
                 </tr>
               )}

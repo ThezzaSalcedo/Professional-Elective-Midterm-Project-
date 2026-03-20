@@ -39,6 +39,7 @@ export type MOA = {
   contactEmail: string;
   industryType: string;
   effectiveDate: string;
+  expirationDate: string;
   college: string;
   status: MOAStatus;
   isDeleted: boolean;

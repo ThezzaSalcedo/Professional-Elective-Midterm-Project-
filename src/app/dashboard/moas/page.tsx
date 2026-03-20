@@ -23,7 +23,8 @@ import {
   Edit2,
   Sparkles,
   Save,
-  ShieldAlert
+  ShieldAlert,
+  Clock
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ import { MOA, AuditEntry, MOAStatus, SystemLog } from '@/app/lib/types';
 import { classifyMoaIndustry } from '@/ai/flows/moa-industry-classifier';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { formatDistanceToNow, differenceInDays } from 'date-fns';
 
 export default function MoaListPage() {
   const { user, firebaseUser } = useAuth();
@@ -83,6 +85,26 @@ export default function MoaListPage() {
       m.address.toLowerCase().includes(q)
     );
   }, [moas, search, activeTab, user?.role]);
+
+  const getExpirationDisplay = (dateStr: string) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const now = new Date();
+    const daysLeft = differenceInDays(date, now);
+    const isExpired = daysLeft < 0;
+
+    return (
+      <div className="flex flex-col">
+        <div className="text-xs font-medium">{date.toLocaleDateString()}</div>
+        <div className={cn(
+          "text-[10px] font-bold uppercase tracking-tighter",
+          isExpired ? "text-destructive" : daysLeft <= 60 ? "text-orange-500" : "text-green-600"
+        )}>
+          {isExpired ? "Expired" : `${formatDistanceToNow(date)} left`}
+        </div>
+      </div>
+    );
+  };
 
   const logOperation = async (operation: SystemLog['operation'], moa: MOA, details?: string) => {
     if (!firestore || !user || !firebaseUser) return;
@@ -208,10 +230,7 @@ export default function MoaListPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-primary">MOA Management</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            {user?.role === 'student' 
-              ? "Institutional repository for approved partnership agreements." 
-              : "Institutional repository for partnership agreements. Changes are pushed in real-time."
-            }
+            Institutional repository for partnership agreements. Validity and expiration tracking enabled.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
@@ -238,16 +257,6 @@ export default function MoaListPage() {
         </Alert>
       )}
 
-      {isIndexBuilding && (
-        <Alert className="bg-blue-50 border-blue-200">
-          <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
-          <AlertTitle className="text-blue-800">Optimizing Registry</AlertTitle>
-          <AlertDescription className="text-blue-700">
-            The institutional database is currently optimizing for your account level. Records will appear shortly.
-          </AlertDescription>
-        </Alert>
-      )}
-
       {user?.role === 'admin' && (
         <Tabs defaultValue="all" onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 max-w-[400px]">
@@ -260,11 +269,12 @@ export default function MoaListPage() {
 
       <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm min-w-[700px]">
+          <table className="w-full text-xs sm:text-sm min-w-[850px]">
             <thead className="bg-muted/50 border-b">
               <tr>
                 <th className="px-6 py-4 text-left font-semibold">Partner Details</th>
                 <th className="px-6 py-4 text-left font-semibold">College & Industry</th>
+                <th className="px-6 py-4 text-left font-semibold">Validity</th>
                 <th className="px-6 py-4 text-left font-semibold">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -282,6 +292,9 @@ export default function MoaListPage() {
                   <td className="px-6 py-4">
                     <div className="font-medium text-xs truncate max-w-[150px]">{m.college}</div>
                     <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{m.industryType}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {getExpirationDisplay(m.expirationDate)}
                   </td>
                   <td className="px-6 py-4">
                     <span className={cn(
@@ -321,6 +334,15 @@ export default function MoaListPage() {
                                     <div>
                                       <Label className="text-[10px] uppercase font-bold text-muted-foreground">Office Address</Label>
                                       <div className="text-xs leading-relaxed mt-1">{selectedMoa.address}</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-3">
+                                    <Clock className="w-4 h-4 text-primary mt-1 shrink-0" />
+                                    <div>
+                                      <Label className="text-[10px] uppercase font-bold text-muted-foreground">Agreement Validity</Label>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        {getExpirationDisplay(selectedMoa.expirationDate)}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -369,9 +391,15 @@ export default function MoaListPage() {
                                     <Label>HTE ID</Label>
                                     <Input required value={editMoa.hteId} onChange={e => setEditMoa({...editMoa, hteId: e.target.value})} />
                                   </div>
-                                  <div className="space-y-2">
-                                    <Label>Effective Date</Label>
-                                    <Input type="date" required value={editMoa.effectiveDate.split('T')[0]} onChange={e => setEditMoa({...editMoa, effectiveDate: new Date(e.target.value).toISOString()})} />
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-2">
+                                      <Label>Effective Date</Label>
+                                      <Input type="date" required value={editMoa.effectiveDate.split('T')[0]} onChange={e => setEditMoa({...editMoa, effectiveDate: new Date(e.target.value).toISOString()})} />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Expiration Date</Label>
+                                      <Input type="date" required value={editMoa.expirationDate.split('T')[0]} onChange={e => setEditMoa({...editMoa, expirationDate: new Date(e.target.value).toISOString()})} />
+                                    </div>
                                   </div>
                                 </div>
 
@@ -469,7 +497,7 @@ export default function MoaListPage() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic">
+                  <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic">
                     {activeTab === 'trash' ? "Trash bin is empty." : "No authorized records found."}
                   </td>
                 </tr>

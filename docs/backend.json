@@ -31,6 +31,7 @@
         "contactEmail": { "type": "string", "format": "email" },
         "industryType": { "type": "string" },
         "effectiveDate": { "type": "string", "format": "date-time" },
+        "expirationDate": { "type": "string", "format": "date-time" },
         "college": { "type": "string" },
         "status": { "type": "string" },
         "isDeleted": { "type": "boolean" },
@@ -50,7 +51,7 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "hteId", "companyName", "address", "contactPerson", "contactEmail", "industryType", "effectiveDate", "college", "status", "isDeleted", "createdAt", "updatedAt"]
+      "required": ["id", "hteId", "companyName", "address", "contactPerson", "contactEmail", "industryType", "effectiveDate", "expirationDate", "college", "status", "isDeleted", "createdAt", "updatedAt"]
     },
     "AuditLog": {
       "title": "Audit Log",
