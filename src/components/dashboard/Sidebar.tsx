@@ -23,7 +23,7 @@ export function Sidebar() {
   // Navigation items are calculated dynamically based on the current user's role
   const navItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'MOA List', href: '/dashboard/moas', icon: FileText },
+    { label: 'MOA Management', href: '/dashboard/moas', icon: FileText },
   ];
 
   if (user?.role === 'admin') {

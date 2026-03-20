@@ -2,6 +2,7 @@
 "use client"
 
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase, useMoaCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -19,17 +20,25 @@ import {
   User,
   MapPin,
   History,
-  Database
+  Database,
+  Plus,
+  Edit2,
+  Sparkles,
+  Save
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { MOA, AuditEntry } from '@/app/lib/types';
+import { MOA, AuditEntry, MOAStatus } from '@/app/lib/types';
+import { classifyMoaIndustry } from '@/ai/flows/moa-industry-classifier';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function MoaListPage() {
   const { user, firebaseUser } = useAuth();
@@ -37,7 +46,10 @@ export default function MoaListPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [selectedMoa, setSelectedMoa] = useState<MOA | null>(null);
+  const [editMoa, setEditMoa] = useState<MOA | null>(null);
   const [activeTab, setActiveTab] = useState('all');
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -91,7 +103,8 @@ export default function MoaListPage() {
     updateDoc(ref, { 
       isDeleted: true, 
       deletedAt: new Date().toISOString(),
-      auditTrail: arrayUnion(audit) 
+      auditTrail: arrayUnion(audit),
+      updatedAt: new Date().toISOString()
     });
     toast({ title: "Record moved to trash" });
   };
@@ -107,9 +120,60 @@ export default function MoaListPage() {
     };
     updateDoc(ref, { 
       isDeleted: false, 
-      auditTrail: arrayUnion(audit) 
+      auditTrail: arrayUnion(audit),
+      updatedAt: new Date().toISOString()
     });
     toast({ title: "Record recovered" });
+  };
+
+  const handleClassify = async () => {
+    if (!editMoa?.companyName) return;
+    setIsClassifying(true);
+    try {
+      const result = await classifyMoaIndustry({ companyName: editMoa.companyName });
+      setEditMoa(prev => prev ? { ...prev, industryType: result.industryType } : null);
+      toast({ title: "AI Suggested", description: `Industry: ${result.industryType}` });
+    } catch (e) {
+      toast({ title: "AI Suggestion Failed", variant: "destructive" });
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
+  const handleUpdateMoa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editMoa || !firestore || !user || !firebaseUser) return;
+    
+    setIsUpdating(true);
+    const ref = doc(firestore, 'moas', editMoa.id);
+    const audit: AuditEntry = {
+      userId: firebaseUser.uid,
+      userName: user.fullName || 'User',
+      operation: 'EDIT',
+      timestamp: new Date().toISOString()
+    };
+
+    const { id, ...updateData } = editMoa;
+    const finalUpdate = {
+      ...updateData,
+      auditTrail: arrayUnion(audit),
+      updatedAt: new Date().toISOString()
+    };
+
+    updateDoc(ref, finalUpdate)
+      .then(() => {
+        toast({ title: "Agreement Updated", description: "Changes have been successfully synchronized." });
+        setEditMoa(null);
+      })
+      .catch(async (err) => {
+        const permissionError = new FirestorePermissionError({
+          path: ref.path,
+          operation: 'update',
+          requestResourceData: finalUpdate,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => setIsUpdating(false));
   };
 
   if (isLoading && !isIndexBuilding) {
@@ -125,14 +189,24 @@ export default function MoaListPage() {
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-primary">Partnership Registry</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-primary">Partnership Management</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Institutional {user?.role} repository. Use search to filter specific records.
+            Institutional repository for partnership agreements. Use search to filter specific records.
           </p>
         </div>
-        <div className="relative w-full lg:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pl-10 h-10 text-sm" placeholder="Search agreements..." value={search} onChange={e => setSearch(e.target.value)} />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative w-full lg:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input className="pl-10 h-10 text-sm" placeholder="Search agreements..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          {user?.canAddMoa && (
+            <Button asChild className="gap-2">
+              <Link href="/dashboard/moas/new">
+                <Plus className="w-4 h-4" />
+                Add Agreement
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -284,6 +358,108 @@ export default function MoaListPage() {
                           )}
                         </DialogContent>
                       </Dialog>
+
+                      {user?.canEditMoa && !m.isDeleted && (
+                        <Dialog open={!!editMoa && editMoa.id === m.id} onOpenChange={(open) => setEditMoa(open ? m : null)}>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary"><Edit2 className="w-4 h-4" /></Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl w-[95vw] sm:w-full overflow-y-auto max-h-[90vh]">
+                            <DialogHeader>
+                              <DialogTitle>Edit Institutional Agreement</DialogTitle>
+                            </DialogHeader>
+                            {editMoa && (
+                              <form onSubmit={handleUpdateMoa} className="space-y-4 pt-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>HTE ID</Label>
+                                    <Input required value={editMoa.hteId} onChange={e => setEditMoa({...editMoa, hteId: e.target.value})} />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Effective Date</Label>
+                                    <Input type="date" required value={editMoa.effectiveDate.split('T')[0]} onChange={e => setEditMoa({...editMoa, effectiveDate: new Date(e.target.value).toISOString()})} />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label>Company Name</Label>
+                                  <div className="flex gap-2">
+                                    <Input required className="flex-1" value={editMoa.companyName} onChange={e => setEditMoa({...editMoa, companyName: e.target.value})} />
+                                    <Button type="button" variant="outline" size="icon" onClick={handleClassify} disabled={isClassifying}>
+                                      {isClassifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Industry Type</Label>
+                                    <Select value={editMoa.industryType} onValueChange={v => setEditMoa({...editMoa, industryType: v})}>
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Telecom">Telecom</SelectItem>
+                                        <SelectItem value="Food">Food</SelectItem>
+                                        <SelectItem value="Services">Services</SelectItem>
+                                        <SelectItem value="Technology">Technology</SelectItem>
+                                        <SelectItem value="Finance">Finance</SelectItem>
+                                        <SelectItem value="Education">Education</SelectItem>
+                                        <SelectItem value="Healthcare">Healthcare</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>College</Label>
+                                    <Input required value={editMoa.college} onChange={e => setEditMoa({...editMoa, college: e.target.value})} />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label>Address</Label>
+                                  <Input required value={editMoa.address} onChange={e => setEditMoa({...editMoa, address: e.target.value})} />
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Contact Person</Label>
+                                    <Input required value={editMoa.contactPerson} onChange={e => setEditMoa({...editMoa, contactPerson: e.target.value})} />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Contact Email</Label>
+                                    <Input type="email" required value={editMoa.contactEmail} onChange={e => setEditMoa({...editMoa, contactEmail: e.target.value})} />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label>Agreement Status</Label>
+                                  <Select value={editMoa.status} onValueChange={(v: MOAStatus) => setEditMoa({...editMoa, status: v})}>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="PROCESSING: Awaiting signature">PROCESSING: Awaiting signature</SelectItem>
+                                      <SelectItem value="PROCESSING: Sent to Legal">PROCESSING: Sent to Legal</SelectItem>
+                                      <SelectItem value="PROCESSING: Sent to VPAA/OP">PROCESSING: Sent to VPAA/OP</SelectItem>
+                                      <SelectItem value="APPROVED: Signed by President">APPROVED: Signed by President</SelectItem>
+                                      <SelectItem value="APPROVED: On-going notarization">APPROVED: On-going notarization</SelectItem>
+                                      <SelectItem value="APPROVED: No notarization needed">APPROVED: No notarization needed</SelectItem>
+                                      <SelectItem value="EXPIRED">EXPIRED</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <DialogFooter className="pt-4">
+                                  <Button type="submit" disabled={isUpdating} className="w-full gap-2">
+                                    {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    Save Changes
+                                  </Button>
+                                </DialogFooter>
+                              </form>
+                            )}
+                          </DialogContent>
+                        </Dialog>
+                      )}
 
                       {user?.canDeleteMoa && !m.isDeleted && (
                         <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-8 w-8" onClick={() => handleSoftDelete(m.id)} title="Soft Delete"><Trash2 className="w-4 h-4" /></Button>
