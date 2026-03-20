@@ -12,14 +12,13 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Plus,
-  Edit2,
   UserPlus,
   ShieldAlert,
-  Save
+  Save,
+  ChevronDown,
+  Edit2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -27,6 +26,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { User, Role } from '@/app/lib/types';
+
+type AccessLevel = 'VIEWER' | 'CONTRIBUTOR' | 'EDITOR' | 'MANAGER';
 
 export default function UserManagementPage() {
   const { user: currentUser } = useAuth();
@@ -40,9 +41,7 @@ export default function UserManagementPage() {
     fullName: '',
     email: '',
     role: 'student' as Role,
-    canAddMoa: false,
-    canEditMoa: false,
-    canDeleteMoa: false
+    accessLevel: 'VIEWER' as AccessLevel
   });
 
   const usersQuery = useMemoFirebase(() => {
@@ -52,13 +51,37 @@ export default function UserManagementPage() {
 
   const { data: users, isLoading } = useCollection(usersQuery);
 
-  const handleToggle = async (userId: string, field: string, value: boolean, name: string) => {
+  const getAccessLevel = (u: any): AccessLevel => {
+    if (u.canDeleteMoa) return 'MANAGER';
+    if (u.canEditMoa) return 'EDITOR';
+    if (u.canAddMoa) return 'CONTRIBUTOR';
+    return 'VIEWER';
+  };
+
+  const handleAccessLevelChange = async (userId: string, level: AccessLevel, name: string) => {
     if (!firestore) return;
     const ref = doc(firestore, 'users', userId);
-    await updateDoc(ref, { [field]: value });
+    
+    const updates = {
+      canAddMoa: level !== 'VIEWER',
+      canEditMoa: level === 'EDITOR' || level === 'MANAGER',
+      canDeleteMoa: level === 'MANAGER'
+    };
+
+    await updateDoc(ref, updates);
     toast({ 
-      title: "Settings Updated", 
-      description: `Permissions for ${name} have been synchronized.` 
+      title: "Permissions Synchronized", 
+      description: `${name} is now designated as ${level}.` 
+    });
+  };
+
+  const handleToggleBlock = async (userId: string, isBlocked: boolean, name: string) => {
+    if (!firestore) return;
+    const ref = doc(firestore, 'users', userId);
+    await updateDoc(ref, { isBlocked });
+    toast({ 
+      title: isBlocked ? "Access Suspended" : "Access Restored", 
+      description: `Institutional account for ${name} has been ${isBlocked ? 'blocked' : 'unblocked'}.` 
     });
   };
 
@@ -66,35 +89,40 @@ export default function UserManagementPage() {
     e.preventDefault();
     if (!firestore) return;
 
+    const accessFlags = {
+      canAddMoa: formData.accessLevel !== 'VIEWER',
+      canEditMoa: formData.accessLevel === 'EDITOR' || formData.accessLevel === 'MANAGER',
+      canDeleteMoa: formData.accessLevel === 'MANAGER'
+    };
+
     try {
       if (selectedUser) {
-        // Edit existing
         const ref = doc(firestore, 'users', selectedUser.id);
         await updateDoc(ref, {
           fullName: formData.fullName,
           role: formData.role,
-          canAddMoa: formData.canAddMoa,
-          canEditMoa: formData.canEditMoa,
-          canDeleteMoa: formData.canDeleteMoa
+          ...accessFlags
         });
-        toast({ title: "User Updated", description: `${formData.fullName}'s profile has been saved.` });
+        toast({ title: "Profile Synchronized", description: `${formData.fullName}'s institutional record has been updated.` });
       } else {
-        // Create new
         const id = Math.random().toString(36).substr(2, 9);
         const ref = doc(firestore, 'users', id);
         await setDoc(ref, {
-          ...formData,
           id,
+          fullName: formData.fullName,
+          email: formData.email,
+          role: formData.role,
+          ...accessFlags,
           isBlocked: false,
           createdAt: new Date().toISOString()
         });
-        toast({ title: "User Created", description: `${formData.fullName} added to the registry.` });
+        toast({ title: "User Registered", description: `${formData.fullName} has been added to the institutional registry.` });
       }
       setIsAdding(false);
       setIsEditing(false);
       resetForm();
     } catch (error) {
-      toast({ title: "Error", description: "Failed to save user data.", variant: "destructive" });
+      toast({ title: "Registry Error", description: "Failed to synchronize user data with the server.", variant: "destructive" });
     }
   };
 
@@ -103,22 +131,18 @@ export default function UserManagementPage() {
       fullName: '',
       email: '',
       role: 'student',
-      canAddMoa: false,
-      canEditMoa: false,
-      canDeleteMoa: false
+      accessLevel: 'VIEWER'
     });
     setSelectedUser(null);
   };
 
-  const openEdit = (user: User) => {
-    setSelectedUser(user);
+  const openEdit = (u: any) => {
+    setSelectedUser(u);
     setFormData({
-      fullName: user.fullName,
-      email: user.email,
-      role: user.role,
-      canAddMoa: user.canAddMoa,
-      canEditMoa: user.canEditMoa,
-      canDeleteMoa: user.canDeleteMoa
+      fullName: u.fullName || '',
+      email: u.email || '',
+      role: u.role || 'student',
+      accessLevel: getAccessLevel(u)
     });
     setIsEditing(true);
   };
@@ -128,7 +152,7 @@ export default function UserManagementPage() {
       <div className="flex flex-col items-center justify-center h-full text-center px-4">
         <ShieldAlert className="w-16 h-16 text-muted-foreground opacity-20 mb-4" />
         <h2 className="text-xl font-bold">Access Restricted</h2>
-        <p className="text-muted-foreground max-w-sm text-sm">Only super administrators can access this module.</p>
+        <p className="text-muted-foreground max-w-sm text-sm">Only super administrators can access the system registry.</p>
       </div>
     );
   }
@@ -137,7 +161,7 @@ export default function UserManagementPage() {
     return (
       <div className="py-20 flex flex-col items-center justify-center space-y-4">
         <Loader2 className="animate-spin text-primary h-8 w-8" />
-        <p className="text-sm text-muted-foreground">Synchronizing user registry...</p>
+        <p className="text-sm text-muted-foreground">Synchronizing institutional registry...</p>
       </div>
     );
   }
@@ -146,8 +170,8 @@ export default function UserManagementPage() {
     <div className="space-y-6 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary">System Registry</h1>
-          <p className="text-sm text-muted-foreground">Manage roles, permissions, and security policies.</p>
+          <h1 className="text-2xl font-bold text-primary tracking-tight">System Registry</h1>
+          <p className="text-sm text-muted-foreground">Manage institutional roles, access levels, and security policies.</p>
         </div>
         <Dialog open={isAdding} onOpenChange={(open) => { setIsAdding(open); if(!open) resetForm(); }}>
           <DialogTrigger asChild>
@@ -158,7 +182,7 @@ export default function UserManagementPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add New User</DialogTitle>
+              <DialogTitle>Register New User</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSaveUser} className="space-y-4 pt-4">
               <div className="space-y-2">
@@ -169,18 +193,34 @@ export default function UserManagementPage() {
                 <Label>Institutional Email</Label>
                 <Input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="user@neu.edu.ph" />
               </div>
-              <div className="space-y-2">
-                <Label>Primary Role</Label>
-                <Select value={formData.role} onValueChange={(val: Role) => setFormData({...formData, role: val})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Administrator</SelectItem>
-                    <SelectItem value="faculty">Faculty Member</SelectItem>
-                    <SelectItem value="student">Student</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Primary Role</Label>
+                  <Select value={formData.role} onValueChange={(val: Role) => setFormData({...formData, role: val})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Administrator</SelectItem>
+                      <SelectItem value="faculty">Faculty Member</SelectItem>
+                      <SelectItem value="student">Student</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Access Level</Label>
+                  <Select value={formData.accessLevel} onValueChange={(val: AccessLevel) => setFormData({...formData, accessLevel: val})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VIEWER">Viewer</SelectItem>
+                      <SelectItem value="CONTRIBUTOR">Contributor</SelectItem>
+                      <SelectItem value="EDITOR">Editor</SelectItem>
+                      <SelectItem value="MANAGER">Manager</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" className="w-full">Initialize Account</Button>
@@ -195,10 +235,10 @@ export default function UserManagementPage() {
           <table className="w-full text-xs sm:text-sm min-w-[900px]">
             <thead className="bg-muted/50 border-b">
               <tr>
-                <th className="px-6 py-4 text-left font-semibold">User Details</th>
+                <th className="px-6 py-4 text-left font-semibold">Institutional User</th>
                 <th className="px-6 py-4 text-left font-semibold">Role</th>
-                <th className="px-6 py-4 text-center font-semibold">Rights (Add/Edit/Del)</th>
-                <th className="px-6 py-4 text-center font-semibold">Access Status</th>
+                <th className="px-6 py-4 text-center font-semibold">Registry Access Level</th>
+                <th className="px-6 py-4 text-center font-semibold">System Status</th>
                 <th className="px-6 py-4 text-right font-semibold">Management</th>
               </tr>
             </thead>
@@ -219,26 +259,26 @@ export default function UserManagementPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex justify-center items-center gap-4">
+                    <div className="flex justify-center">
                       {u.role === 'faculty' ? (
-                        <>
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Add</Label>
-                            <Switch checked={u.canAddMoa} onCheckedChange={(v) => handleToggle(u.id, 'canAddMoa', v, u.fullName)} />
-                          </div>
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Edit</Label>
-                            <Switch checked={u.canEditMoa} onCheckedChange={(v) => handleToggle(u.id, 'canEditMoa', v, u.fullName)} />
-                          </div>
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Del</Label>
-                            <Switch checked={u.canDeleteMoa} onCheckedChange={(v) => handleToggle(u.id, 'canDeleteMoa', v, u.fullName)} />
-                          </div>
-                        </>
+                        <Select 
+                          value={getAccessLevel(u)} 
+                          onValueChange={(val: AccessLevel) => handleAccessLevelChange(u.id, val, u.fullName)}
+                        >
+                          <SelectTrigger className="w-40 h-8 text-[11px] font-bold uppercase tracking-tighter">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="VIEWER">VIEWER (Read Only)</SelectItem>
+                            <SelectItem value="CONTRIBUTOR">CONTRIBUTOR (Add)</SelectItem>
+                            <SelectItem value="EDITOR">EDITOR (Add/Edit)</SelectItem>
+                            <SelectItem value="MANAGER">MANAGER (Add/Edit/Del)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       ) : u.role === 'admin' ? (
-                        <div className="text-[10px] font-bold text-green-600 uppercase tracking-tighter">Full Administrative Rights</div>
+                        <div className="text-[10px] font-bold text-green-600 uppercase tracking-tighter bg-green-50 px-3 py-1 rounded border border-green-100">Full Institutional Manager</div>
                       ) : (
-                        <div className="text-[10px] font-medium text-muted-foreground uppercase italic">Institutional Viewer</div>
+                        <div className="text-[10px] font-medium text-muted-foreground uppercase italic bg-muted/50 px-3 py-1 rounded">Institutional Viewer</div>
                       )}
                     </div>
                   </td>
@@ -264,7 +304,7 @@ export default function UserManagementPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          onClick={() => handleToggle(u.id, 'isBlocked', !u.isBlocked, u.fullName)}
+                          onClick={() => handleToggleBlock(u.id, !u.isBlocked, u.fullName)}
                           className={cn(
                             "h-8 w-8",
                             u.isBlocked ? "text-green-600 hover:bg-green-50" : "text-destructive hover:bg-destructive/5"
@@ -285,7 +325,7 @@ export default function UserManagementPage() {
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit User Profile</DialogTitle>
+            <DialogTitle>Update Institutional Profile</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSaveUser} className="space-y-4 pt-4">
             <div className="space-y-2">
@@ -296,18 +336,34 @@ export default function UserManagementPage() {
               <Label className="opacity-50">Institutional Email (Read-only)</Label>
               <Input disabled value={formData.email} className="bg-muted" />
             </div>
-            <div className="space-y-2">
-              <Label>Role Assignment</Label>
-              <Select value={formData.role} onValueChange={(val: Role) => setFormData({...formData, role: val})}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                  <SelectItem value="faculty">Faculty Member</SelectItem>
-                  <SelectItem value="student">Student</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Role Assignment</Label>
+                <Select value={formData.role} onValueChange={(val: Role) => setFormData({...formData, role: val})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Administrator</SelectItem>
+                    <SelectItem value="faculty">Faculty Member</SelectItem>
+                    <SelectItem value="student">Student</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Access Level</Label>
+                <Select value={formData.accessLevel} onValueChange={(val: AccessLevel) => setFormData({...formData, accessLevel: val})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="VIEWER">Viewer</SelectItem>
+                    <SelectItem value="CONTRIBUTOR">Contributor</SelectItem>
+                    <SelectItem value="EDITOR">Editor</SelectItem>
+                    <SelectItem value="MANAGER">Manager</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter className="pt-4">
               <Button type="submit" className="w-full gap-2">
