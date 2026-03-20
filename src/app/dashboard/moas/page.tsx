@@ -31,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { MOA, AuditEntry, MOAStatus } from '@/app/lib/types';
@@ -72,7 +73,7 @@ export default function MoaListPage() {
   }, [firestore, user?.role, user?.id]);
 
   // useMoaCollection handles the real-time onSnapshot synchronization
-  const { data: moas, isLoading, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
+  const { data: moas, isLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
   const filteredMoas = useMemo(() => {
     if (!moas) return [];
@@ -159,8 +160,11 @@ export default function MoaListPage() {
     };
 
     const { id, ...updateData } = editMoa;
+    // Ensure critical institutional fields are explicitly preserved or defaulted
     const finalUpdate = {
       ...updateData,
+      isDeleted: editMoa.isDeleted ?? false,
+      status: editMoa.status,
       auditTrail: arrayUnion(audit),
       updatedAt: new Date().toISOString()
     };
@@ -217,6 +221,24 @@ export default function MoaListPage() {
           )}
         </div>
       </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Synchronization Error</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
+
+      {isIndexBuilding && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+          <AlertTitle className="text-blue-800">Optimizing Registry</AlertTitle>
+          <AlertDescription className="text-blue-700">
+            The institutional database is currently optimizing for your account level. Records will appear shortly.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {user?.role === 'admin' && (
         <Tabs defaultValue="all" onValueChange={setActiveTab} className="w-full">
@@ -335,7 +357,7 @@ export default function MoaListPage() {
                                           "px-2 py-0.5 rounded font-black text-[9px] uppercase shrink-0",
                                           a.operation === 'INSERT' ? "bg-green-100 text-green-700" :
                                           a.operation === 'EDIT' ? "bg-blue-100 text-blue-700" :
-                                          "bg-red-100 text-red-700"
+                                          a.operation === 'SOFT-DELETE' ? "bg-red-100 text-red-700" : "bg-muted text-muted-foreground"
                                         )}>
                                           {a.operation}
                                         </span>
@@ -396,6 +418,8 @@ export default function MoaListPage() {
                                         <SelectItem value="Finance">Finance</SelectItem>
                                         <SelectItem value="Education">Education</SelectItem>
                                         <SelectItem value="Healthcare">Healthcare</SelectItem>
+                                        <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+                                        <SelectItem value="Retail">Retail</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </div>
