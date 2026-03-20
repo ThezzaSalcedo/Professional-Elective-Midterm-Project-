@@ -9,14 +9,13 @@ service cloud.firestore {
     }
 
     // Helper: Check if the email belongs to the institutional domain
-    // Uses a robust case-insensitive regex for domain verification
     function isInstitutionalEmail() {
       return isSignedIn() && 
              request.auth.token.email != null && 
              request.auth.token.email.matches('(?i).*@neu\\.edu\\.ph$');
     }
 
-    // Helper: Get user document safely without triggering recursive rule failures
+    // Helper: Get user document safely
     function getUserData() {
       let path = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(path) ? get(path).data : null;
@@ -29,9 +28,10 @@ service cloud.firestore {
     }
 
     // Helper: Check if user is blocked
+    // Robust check: If profile doesn't exist yet, they aren't blocked.
     function isNotBlocked() {
       let data = getUserData();
-      return isSignedIn() && data != null && data.isBlocked == false;
+      return isSignedIn() && (data == null || data.isBlocked == false);
     }
 
     match /users/{userId} {
@@ -48,12 +48,14 @@ service cloud.firestore {
       // Visibility logic: 
       // Admins/Faculty see all active records.
       // Students see only approved, non-deleted records.
+      // We align the 'list' rule with the range query used in the client.
       allow list, get: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
         (hasRole('student') && 
          resource.data.isDeleted == false && 
-         resource.data.status.upper().matches('APPROVED.*'))
+         resource.data.status >= 'APPROVED' && 
+         resource.data.status < 'APPROVEE')
       );
 
       // Record lifecycle management restricted to authorized institutional actors
@@ -76,6 +78,7 @@ service cloud.firestore {
     match /audit_logs/{logId} {
       // Audit logs are immutable and strictly for administrative oversight
       allow read: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
+      // Allow any institutional user to create logs for audit trail purposes
       allow create: if isSignedIn() && isInstitutionalEmail() && isNotBlocked();
     }
   }
