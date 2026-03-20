@@ -37,9 +37,12 @@ export type MOA = {
 
 export type User = {
   id: string;
-  name: string;
+  fullName: string;
   email: string;
   role: Role;
-  canEdit: boolean;
+  canAddMoa: boolean;
+  canEditMoa: boolean;
+  canDeleteMoa: boolean;
   isBlocked: boolean;
+  createdAt?: string;
 };

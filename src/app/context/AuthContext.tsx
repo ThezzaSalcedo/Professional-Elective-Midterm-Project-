@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -33,11 +34,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const data = snap.data();
             setProfile({
               id: firebaseUser.uid,
-              name: data.fullName || firebaseUser.displayName || 'User',
+              fullName: data.fullName || firebaseUser.displayName || 'User',
               email: data.email || firebaseUser.email || '',
               role: (data.role as string).toLowerCase() as Role,
-              canEdit: !!data.canEditMoa || (data.role === 'admin'),
+              canAddMoa: !!data.canAddMoa || data.role === 'admin',
+              canEditMoa: !!data.canEditMoa || data.role === 'admin',
+              canDeleteMoa: !!data.canDeleteMoa || data.role === 'admin',
               isBlocked: data.isBlocked === true,
+              createdAt: data.createdAt,
             });
           } else {
             setProfile(null);
