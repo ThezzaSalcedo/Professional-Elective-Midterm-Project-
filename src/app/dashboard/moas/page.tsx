@@ -51,12 +51,15 @@ export default function MoaListPage() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // Dynamic query re-subscription based on real-time user role updates
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
+    // Admins see all records for full oversight
     if (user.role === 'admin') return base;
     
+    // Students see only approved, non-deleted records
     if (user.role === 'student') {
       return query(base, 
         where('isDeleted', '==', false), 
@@ -65,8 +68,9 @@ export default function MoaListPage() {
       );
     }
     
+    // Faculty see all active records
     return query(base, where('isDeleted', '==', false));
-  }, [firestore, user]);
+  }, [firestore, user?.role, user?.id]); // Re-run when role changes
 
   const { data: moas, isLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
@@ -75,6 +79,7 @@ export default function MoaListPage() {
     
     let result = moas;
 
+    // Admin view can filter between active and trash
     if (user?.role === 'admin') {
       if (activeTab === 'active') result = result.filter(m => !m.isDeleted);
       if (activeTab === 'trash') result = result.filter(m => m.isDeleted);
@@ -162,7 +167,7 @@ export default function MoaListPage() {
 
     updateDoc(ref, finalUpdate)
       .then(() => {
-        toast({ title: "Agreement Updated", description: "Changes have been successfully synchronized." });
+        toast({ title: "Agreement Updated", description: "Changes synchronized." });
         setEditMoa(null);
       })
       .catch(async (err) => {
@@ -180,7 +185,7 @@ export default function MoaListPage() {
     return (
       <div className="py-20 flex flex-col items-center justify-center space-y-4">
         <Loader2 className="animate-spin text-primary h-8 w-8" />
-        <p className="text-sm text-muted-foreground font-medium">Synchronizing Partnership Registry...</p>
+        <p className="text-sm text-muted-foreground font-medium">Synchronizing Registry...</p>
       </div>
     );
   }
@@ -189,15 +194,15 @@ export default function MoaListPage() {
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-primary">Partnership Management</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-primary">MOA Management</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Institutional repository for partnership agreements. Use search to filter specific records.
+            Institutional repository for partnership agreements.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative w-full lg:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input className="pl-10 h-10 text-sm" placeholder="Search agreements..." value={search} onChange={e => setSearch(e.target.value)} />
+            <Input className="pl-10 h-10 text-sm" placeholder="Search registry..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           {user?.canAddMoa && (
             <Button asChild className="gap-2">
@@ -220,24 +225,6 @@ export default function MoaListPage() {
         </Tabs>
       )}
 
-      {error && !isIndexBuilding && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Permission Restricted</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-
-      {isIndexBuilding && (
-        <Alert className="bg-blue-50 border-blue-200">
-          <Database className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-800">Optimizing Database</AlertTitle>
-          <AlertDescription className="text-blue-700">
-            The dashboard is currently optimizing its database for your role. This may take a few minutes.
-          </AlertDescription>
-        </Alert>
-      )}
-
       <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs sm:text-sm min-w-[700px]">
@@ -245,7 +232,7 @@ export default function MoaListPage() {
               <tr>
                 <th className="px-6 py-4 text-left font-semibold">Partner Details</th>
                 <th className="px-6 py-4 text-left font-semibold">College & Industry</th>
-                <th className="px-6 py-4 text-left font-semibold">Current Status</th>
+                <th className="px-6 py-4 text-left font-semibold">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -474,7 +461,7 @@ export default function MoaListPage() {
               )) : (
                 <tr>
                   <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic">
-                    {activeTab === 'trash' ? "Trash bin is currently empty." : "No partnership records match your search criteria."}
+                    {activeTab === 'trash' ? "Trash bin is empty." : "No records found."}
                   </td>
                 </tr>
               )}

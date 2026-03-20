@@ -29,21 +29,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoadingProfile(true);
         const docRef = doc(firestore, 'users', firebaseUser.uid);
         
-        // Real-time listener ensures role changes from Admin are reflected immediately
+        // Real-time listener ensures role and permission changes are reflected immediately
         unsubscribe = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
             const role = (data.role as string || 'student').toLowerCase() as Role;
             
+            // Re-map profile state with updated institutional rights
             setProfile({
               id: firebaseUser.uid,
               fullName: data.fullName || firebaseUser.displayName || 'User',
               email: data.email || firebaseUser.email || '',
               role: role,
-              // Permissions derived directly from Firestore or Admin role override
-              canAddMoa: !!data.canAddMoa || role === 'admin',
-              canEditMoa: !!data.canEditMoa || role === 'admin',
-              canDeleteMoa: !!data.canDeleteMoa || role === 'admin',
+              // Admin role always overrides individual flags for system integrity
+              canAddMoa: role === 'admin' || !!data.canAddMoa,
+              canEditMoa: role === 'admin' || !!data.canEditMoa,
+              canDeleteMoa: role === 'admin' || !!data.canDeleteMoa,
               isBlocked: data.isBlocked === true,
               createdAt: data.createdAt,
             });
