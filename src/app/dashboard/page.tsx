@@ -184,27 +184,6 @@ export default function DashboardPage() {
   if (user?.role === 'student') {
     return (
       <div className="min-h-full flex flex-col space-y-8 animate-in fade-in duration-500">
-        {/* Top Navigation Simulation (Visual only, sidebar handles actual navigation) */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-             <div className="bg-primary p-1.5 rounded-lg">
-                <ShieldCheck className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-lg font-bold tracking-tight text-primary">NEU MOA</span>
-          </div>
-          <div className="hidden sm:flex items-center gap-6">
-            <Button variant="ghost" className="text-xs font-bold gap-2 uppercase tracking-wider text-primary">
-              <LayoutDashboard className="w-4 h-4" /> Dashboard
-            </Button>
-            <Button variant="ghost" className="text-xs font-bold gap-2 uppercase tracking-wider text-muted-foreground" asChild>
-              <Link href="/dashboard/moas"><FileText className="w-4 h-4" /> MOA List</Link>
-            </Button>
-            <Button variant="ghost" className="text-xs font-bold gap-2 uppercase tracking-wider text-muted-foreground">
-              <Settings className="w-4 h-4" /> Settings
-            </Button>
-          </div>
-        </div>
-
         {/* Hero Section */}
         <header className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
