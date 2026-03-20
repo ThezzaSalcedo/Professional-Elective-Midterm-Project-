@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Loader2, ShieldAlert, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
@@ -72,6 +72,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="lg:hidden">
         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetContent side="left" className="p-0 w-64 border-none">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Navigation Menu</SheetTitle>
+              <SheetDescription>Access dashboard, partnership registry, and system settings.</SheetDescription>
+            </SheetHeader>
             <Sidebar />
           </SheetContent>
         </Sheet>
