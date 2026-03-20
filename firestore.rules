@@ -8,15 +8,19 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper: Check if user has an institutional email
-    function isInstitutional() {
-      return isSignedIn() && request.auth.token.email.matches('.*@neu\\.edu\\.ph$');
+    // Helper: Get user document
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // Helper: Check if user has a specific role in the centralized 'users' collection
+    // Helper: Check if user has a specific role
     function hasRole(role) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return isSignedIn() && userDoc != null && userDoc.data.role == role;
+      return isSignedIn() && getUserData().role == role;
+    }
+
+    // Helper: Check if user is blocked
+    function isNotBlocked() {
+      return isSignedIn() && getUserData().isBlocked == false;
     }
 
     match /users/{userId} {
@@ -27,31 +31,25 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Visibility Rules
-      allow list: if isSignedIn() && (
-        hasRole('admin') || 
-        hasRole('faculty') ||
-        (isInstitutional() && hasRole('student'))
-      );
-
-      allow get: if isSignedIn() && (
+      // Students see only APPROVED active records
+      allow list, get: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
-        (
-          isInstitutional() &&
-          resource.data.isDeleted == false && 
-          resource.data.status >= 'APPROVED'
-        )
+        (hasRole('student') && resource.data.isDeleted == false && resource.data.status >= 'APPROVED')
       );
 
-      // Writes restricted to admin or faculty
-      allow create, update: if isSignedIn() && (hasRole('admin') || hasRole('faculty'));
+      // Writes restricted to admin or authorized faculty
+      allow create: if isSignedIn() && isNotBlocked() && (hasRole('admin') || hasRole('faculty'));
+      allow update: if isSignedIn() && isNotBlocked() && (
+        hasRole('admin') || 
+        (hasRole('faculty') && getUserData().canEditMoa == true)
+      );
       allow delete: if false; // Soft-delete only
     }
 
     match /audit_logs/{logId} {
       allow read: if isSignedIn() && hasRole('admin');
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && isNotBlocked();
     }
   }
 }

@@ -34,6 +34,7 @@
         "college": { "type": "string" },
         "status": { "type": "string" },
         "isDeleted": { "type": "boolean" },
+        "deletedAt": { "type": "string", "format": "date-time" },
         "auditTrail": {
           "type": "array",
           "items": {
