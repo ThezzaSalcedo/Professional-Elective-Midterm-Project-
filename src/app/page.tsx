@@ -14,14 +14,13 @@ import { GraduationCap, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { doc, setDoc } from 'firebase/firestore';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 
 const NEU_LOGO_URL = "https://upload.wikimedia.org/wikipedia/en/c/c6/New_Era_University.svg";
 
 export default function HomePage() {
   const { user, isAuthLoading } = useAuth();
-  const { auth, firestore } = useFirebase();
+  const { auth } = useFirebase();
   const { toast } = useToast();
   const router = useRouter();
   
@@ -52,32 +51,6 @@ export default function HomePage() {
     return true;
   };
 
-  const createProfile = async (uid: string, userEmail: string, name: string) => {
-    const lowerEmail = userEmail.toLowerCase();
-    
-    if (!lowerEmail.endsWith('@neu.edu.ph')) {
-      router.push('/restricted');
-      throw new Error("Access Denied: Please use your @neu.edu.ph institutional account.");
-    }
-
-    let roleName: 'admin' | 'faculty' | 'student' = 'student';
-    if (lowerEmail.includes('admin')) roleName = 'admin';
-    else if (lowerEmail.includes('faculty')) roleName = 'faculty';
-
-    const userRef = doc(firestore, 'users', uid);
-    await setDoc(userRef, {
-      id: uid,
-      email: userEmail,
-      fullName: name,
-      role: roleName,
-      canAddMoa: roleName !== 'student',
-      canEditMoa: roleName !== 'student',
-      canDeleteMoa: roleName === 'admin',
-      isBlocked: false,
-      createdAt: new Date().toISOString()
-    });
-  };
-
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateDomain(email)) return;
@@ -102,7 +75,11 @@ export default function HomePage() {
     setIsProcessing(true);
     try {
       const cred = await initiateEmailSignUp(auth, email, password);
-      await createProfile(cred.user.uid, email, fullName);
+      // Update local auth profile display name immediately so FirebaseProvider can pick it up
+      if (cred.user) {
+        await updateProfile(cred.user, { displayName: fullName });
+      }
+      // Handshake and Profile creation is handled centrally in FirebaseProvider.tsx
     } catch (error: any) {
       setIsProcessing(false);
       setErrorMessage(error.message || "Failed to create account.");
@@ -110,8 +87,6 @@ export default function HomePage() {
   };
 
   const handleGoogleLogin = async () => {
-    if (email && !validateDomain(email)) return;
-
     setIsProcessing(true);
     try {
       await initiateGoogleSignIn(auth);
@@ -144,7 +119,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center p-4 overflow-hidden">
-      {/* Background Layer (NEU Campus) */}
       <div 
         className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{ 
@@ -154,7 +128,6 @@ export default function HomePage() {
         }}
       />
 
-      {/* Institutional Logo Header */}
       <div className="relative z-10 mb-8 animate-in fade-in slide-in-from-top-4 duration-700 text-center">
         <div className="relative group inline-block mb-4">
           <div className="absolute -inset-4 bg-white/20 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -167,7 +140,6 @@ export default function HomePage() {
         <h1 className="text-3xl font-black tracking-tight text-white drop-shadow-md uppercase">NEU MOA PORTAL</h1>
       </div>
 
-      {/* Main Login Card - High-end Glassmorphism */}
       <div className="relative z-10 max-w-md w-full bg-white/80 backdrop-blur-[15px] rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-8 sm:p-10 border border-white/40 animate-in fade-in zoom-in duration-700">
         <div className="text-center mb-10">
           <p className="text-[#004d00] font-black text-xs uppercase tracking-[0.2em]">Institutional Access Gateway</p>

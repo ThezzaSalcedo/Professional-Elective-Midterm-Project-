@@ -3,7 +3,7 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, query, where, getDocs, collection, deleteDoc } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged, signOut } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
 import { useRouter } from 'next/navigation';
@@ -95,29 +95,62 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
           
           const userRef = doc(firestore, 'users', firebaseUser.uid);
           try {
+            // 1. Check if UID-based profile already exists
             const docSnap = await getDoc(userRef);
+            
             if (!docSnap.exists()) {
-              let roleName = 'student';
-              const lowerEmail = email.toLowerCase();
-              if (lowerEmail.includes('admin')) roleName = 'admin';
-              else if (lowerEmail.includes('faculty')) roleName = 'faculty';
+              // 2. Profile doesn't exist by UID. Search for pre-registration by email (Handshake)
+              const usersCol = collection(firestore, 'users');
+              const q = query(usersCol, where('email', '==', email));
+              const querySnap = await getDocs(q);
 
-              const profileData = {
-                id: firebaseUser.uid,
-                email: email,
-                fullName: firebaseUser.displayName || 'Institutional User',
-                role: roleName,
-                canAddMoa: roleName !== 'student',
-                canEditMoa: roleName !== 'student',
-                canDeleteMoa: roleName === 'admin',
-                isBlocked: false,
-                createdAt: new Date().toISOString()
-              };
+              if (!querySnap.empty) {
+                // Pre-registered match found! Link UID to the existing record.
+                const existingDoc = querySnap.docs[0];
+                const existingData = existingDoc.data();
+                
+                const profileData = {
+                  ...existingData,
+                  id: firebaseUser.uid,
+                  updatedAt: new Date().toISOString()
+                };
 
-              await setDoc(userRef, profileData);
+                // Link the record to the UID path
+                await setDoc(userRef, profileData);
+
+                // Cleanup: Delete the old pre-registered document if IDs were different
+                if (existingDoc.id !== firebaseUser.uid) {
+                  await deleteDoc(existingDoc.ref);
+                }
+              } else {
+                // 3. No pre-registration match. Create default student profile.
+                let roleName: 'admin' | 'faculty' | 'student' = 'student';
+                
+                // Specific Admin check for institutional requirement
+                if (email === 'jcesperanza@neu.edu.ph') {
+                  roleName = 'admin';
+                } else if (email.includes('admin')) {
+                  roleName = 'admin';
+                } else if (email.includes('faculty')) {
+                  roleName = 'faculty';
+                }
+
+                const profileData = {
+                  id: firebaseUser.uid,
+                  email: email,
+                  fullName: firebaseUser.displayName || 'Institutional User',
+                  role: roleName,
+                  canAddMoa: roleName !== 'student',
+                  canEditMoa: roleName !== 'student',
+                  canDeleteMoa: roleName === 'admin',
+                  isBlocked: false,
+                  createdAt: new Date().toISOString()
+                };
+
+                await setDoc(userRef, profileData);
+              }
             }
           } catch (err: any) {
-            // Surface contextual error for security rules debugging
             const permissionError = new FirestorePermissionError({
               path: userRef.path,
               operation: 'get',

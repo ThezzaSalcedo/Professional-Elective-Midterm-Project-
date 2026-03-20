@@ -28,37 +28,44 @@ service cloud.firestore {
     }
 
     // Helper: Check if user is blocked
-    // Robust check: If profile doesn't exist yet, they aren't blocked.
     function isNotBlocked() {
       let data = getUserData();
       return isSignedIn() && (data == null || data.isBlocked == false);
     }
 
     match /users/{userId} {
-      // Users can read and create their own profile during initial signup
-      // Admins can read any profile for registry management
-      allow read, create: if isSignedIn() && isInstitutionalEmail() && (request.auth.uid == userId || hasRole('admin'));
+      // Visibility logic:
+      // 1. Own profile
+      // 2. Admin
+      // 3. Email-based match during handshake (allows finding pre-registered docs)
+      allow read: if isSignedIn() && isInstitutionalEmail() && (
+        request.auth.uid == userId || 
+        hasRole('admin') || 
+        resource.data.email == request.auth.token.email
+      );
       
-      // Profile modifications restricted to administrative roles
-      allow update: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
-      allow delete: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
+      // Allow creation during initial sign-up or handshake UID-linking
+      allow create: if isSignedIn() && isInstitutionalEmail();
+      
+      // Profile modifications restricted to administrative roles or owner
+      allow update: if isSignedIn() && isInstitutionalEmail() && (hasRole('admin') || request.auth.uid == userId);
+      
+      // Allow delete for admins OR for users cleaning up their own pre-registered doc during handshake
+      allow delete: if isSignedIn() && isInstitutionalEmail() && (
+        hasRole('admin') || 
+        (resource.data.email != null && resource.data.email == request.auth.token.email)
+      );
     }
 
     match /moas/{moaId} {
-      // Visibility logic: 
-      // Admins/Faculty see all active records.
-      // Students see only approved, non-deleted records.
-      // We align the 'list' rule with the range query used in the client.
       allow list, get: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
         (hasRole('student') && 
          resource.data.isDeleted == false && 
-         resource.data.status >= 'APPROVED' && 
-         resource.data.status < 'APPROVEE')
+         resource.data.status >= 'APPROVED')
       );
 
-      // Record lifecycle management restricted to authorized institutional actors
       allow create: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canAddMoa == true)
@@ -76,9 +83,7 @@ service cloud.firestore {
     }
 
     match /audit_logs/{logId} {
-      // Audit logs are immutable and strictly for administrative oversight
       allow read: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
-      // Allow any institutional user to create logs for audit trail purposes
       allow create: if isSignedIn() && isInstitutionalEmail() && isNotBlocked();
     }
   }

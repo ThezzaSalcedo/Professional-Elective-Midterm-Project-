@@ -19,7 +19,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { auth, firestore } = useFirebase();
-  const { user: firebaseUser, isUserLoading } = useUser();
+  const { user: firebaseUser, isUserLoading, isProfileLoading } = useUser();
   const [profile, setProfile] = useState<User | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
@@ -27,7 +27,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let unsubscribe: (() => void) | undefined;
 
     async function setupProfileListener() {
-      if (firebaseUser && firestore) {
+      // Ensure we wait for FirebaseProvider to finish its Handshake/Initialization
+      if (firebaseUser && firestore && !isProfileLoading) {
         setIsLoadingProfile(true);
         const docRef = doc(firestore, 'users', firebaseUser.uid);
         
@@ -52,7 +53,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setIsLoadingProfile(false);
         }, (error) => {
-          // Surface contextual permission error
           const permissionError = new FirestorePermissionError({
             path: docRef.path,
             operation: 'get',
@@ -60,20 +60,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           errorEmitter.emit('permission-error', permissionError);
           setIsLoadingProfile(false);
         });
-      } else {
+      } else if (!isUserLoading && !isProfileLoading) {
         setProfile(null);
         setIsLoadingProfile(false);
       }
     }
 
-    if (!isUserLoading) {
-      setupProfileListener();
-    }
+    setupProfileListener();
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [firebaseUser, isUserLoading, firestore]);
+  }, [firebaseUser, isUserLoading, isProfileLoading, firestore]);
 
   const logout = () => {
     auth?.signOut();
@@ -85,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: profile, 
       firebaseUser,
       logout, 
-      isLoading: isUserLoading || isLoadingProfile 
+      isLoading: isUserLoading || isProfileLoading || isLoadingProfile 
     }}>
       {children}
     </AuthContext.Provider>
