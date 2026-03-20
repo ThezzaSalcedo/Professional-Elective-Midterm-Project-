@@ -147,7 +147,7 @@ export default function HomePage() {
         className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{ 
           backgroundImage: 'url("https://media.licdn.com/dms/image/v2/C4E1BAQF0X2-Pil2iag/company-background_10000/company-background_10000/0/1645461279672/new_era_university_qc_main_cover?e=2147483647&v=beta&t=W6qIZJWlKZS6mWA4ozpu_7zSMtSnOtt9Myf64qdMYUA")',
-          filter: 'blur(10px) brightness(0.7)',
+          filter: 'blur(4px) brightness(0.7)',
           backgroundAttachment: 'fixed'
         }}
       />
@@ -251,7 +251,7 @@ export default function HomePage() {
 
         <div className="relative my-10">
           <Separator className="bg-black/10" />
-          <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent px-4 text-[9px] font-black uppercase text-muted-foreground tracking-[0.3em] whitespace-nowrap">Institutional SSO</span>
+          <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-4 text-[10px] font-black uppercase text-muted-foreground tracking-[0.3em] whitespace-nowrap">or</span>
         </div>
 
         <Button 
