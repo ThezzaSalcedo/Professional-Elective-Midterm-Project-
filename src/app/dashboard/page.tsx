@@ -33,21 +33,16 @@ export default function DashboardPage() {
   const [isSeeding, setIsSeeding] = useState(false);
   const [now, setNow] = useState<Date>(new Date());
 
-  // Handle hydration by setting date on mount
   useEffect(() => {
     setNow(new Date());
   }, []);
 
-  // Dynamic real-time query strictly governed by user role
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
     
-    // Admins see all for oversight, but we'll filter for stats
     if (user.role === 'admin') return base;
     
-    // Students see ONLY approved, non-deleted records. 
-    // This query range captures all statuses starting with "APPROVED"
     if (user.role === 'student') {
       return query(base, 
         where('isDeleted', '==', false),
@@ -56,14 +51,11 @@ export default function DashboardPage() {
       );
     }
     
-    // Faculty see all active (non-deleted) records
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user?.role]);
 
   const { data: moas, isLoading: isMoaLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
-  // Filter moas for the overview table and stats.
-  // This ensures that the Admin dashboard counts only active (non-deleted) records in the overview.
   const activeInstitutionalMoas = useMemo(() => {
     if (!moas) return [];
     return moas.filter(m => !m.isDeleted);
@@ -72,13 +64,11 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     if (!activeInstitutionalMoas) return [];
     
-    // Accuracy check: filter based on institutional status logic
     const active = activeInstitutionalMoas.filter(m => m.status?.startsWith('APPROVED')).length;
     const processing = activeInstitutionalMoas.filter(m => m.status?.startsWith('PROCESSING')).length;
     
     const expiringSoon = activeInstitutionalMoas.filter(m => {
       if (!m.effectiveDate || !m.status?.startsWith('APPROVED')) return false;
-      // Standard university MOA 1-year duration check
       const expiry = new Date(m.effectiveDate);
       expiry.setFullYear(expiry.getFullYear() + 1); 
       const diffTime = expiry.getTime() - now.getTime();
@@ -88,13 +78,25 @@ export default function DashboardPage() {
 
     const expired = activeInstitutionalMoas.filter(m => m.status === 'EXPIRED').length;
 
-    return [
+    const allStats = [
       { title: 'Active Agreements', value: active, icon: CheckCircle2, color: 'bg-green-500' },
       { title: 'In Process', value: processing, icon: Clock, color: 'bg-blue-500' },
       { title: 'Expiring Soon', value: expiringSoon, icon: AlertTriangle, color: 'bg-orange-500' },
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
-  }, [activeInstitutionalMoas, now]);
+
+    // Faculty requested to only see Active and In Process
+    if (user?.role === 'faculty') {
+      return allStats.slice(0, 2);
+    }
+
+    // Students strictly see only authorized content, which usually only includes Approved anyway
+    if (user?.role === 'student') {
+      return allStats.filter(s => s.title === 'Active Agreements');
+    }
+
+    return allStats;
+  }, [activeInstitutionalMoas, now, user?.role]);
 
   const visibleMoas = useMemo(() => {
     if (!activeInstitutionalMoas) return [];
@@ -113,7 +115,6 @@ export default function DashboardPage() {
     if (!firestore || !user || !firebaseUser) return;
     setIsSeeding(true);
     
-    // Add multiple sample records for testing role-based visibility
     const statuses: any[] = [
       'APPROVED: Signed by President',
       'PROCESSING: Sent to Legal',
@@ -205,8 +206,12 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      {/* Accuracy Layer: StatsCards dynamically reflect authorized data visibility */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className={cn(
+        "grid gap-4 sm:gap-6",
+        stats.length === 1 ? "grid-cols-1" :
+        stats.length === 2 ? "grid-cols-1 sm:grid-cols-2" :
+        "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+      )}>
         {stats.map((s) => (
           <StatsCard key={s.title} {...s} colorClass={s.color} />
         ))}
