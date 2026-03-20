@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { 
   ShieldCheck, 
   Ban, 
@@ -16,16 +16,30 @@ import {
   ShieldAlert,
   Save,
   ChevronDown,
-  Edit2
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { User, Role } from '@/app/lib/types';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 type AccessLevel = 'VIEWER' | 'CONTRIBUTOR' | 'EDITOR' | 'MANAGER';
 
@@ -68,21 +82,62 @@ export default function UserManagementPage() {
       canDeleteMoa: level === 'MANAGER'
     };
 
-    await updateDoc(ref, updates);
-    toast({ 
-      title: "Permissions Synchronized", 
-      description: `${name} is now designated as ${level}.` 
-    });
+    updateDoc(ref, updates)
+      .then(() => {
+        toast({ 
+          title: "Permissions Synchronized", 
+          description: `${name} is now designated as ${level}.` 
+        });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: ref.path,
+          operation: 'update',
+          requestResourceData: updates,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const handleToggleBlock = async (userId: string, isBlocked: boolean, name: string) => {
     if (!firestore) return;
     const ref = doc(firestore, 'users', userId);
-    await updateDoc(ref, { isBlocked });
-    toast({ 
-      title: isBlocked ? "Access Suspended" : "Access Restored", 
-      description: `Institutional account for ${name} has been ${isBlocked ? 'blocked' : 'unblocked'}.` 
-    });
+    updateDoc(ref, { isBlocked })
+      .then(() => {
+        toast({ 
+          title: isBlocked ? "Access Suspended" : "Access Restored", 
+          description: `Institutional account for ${name} has been ${isBlocked ? 'blocked' : 'unblocked'}.` 
+        });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: ref.path,
+          operation: 'update',
+          requestResourceData: { isBlocked },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const handleDeleteUser = async (userId: string, name: string) => {
+    if (!firestore) return;
+    if (userId === currentUser?.id) {
+      toast({ title: "Operation Restricted", description: "You cannot remove your own administrative account.", variant: "destructive" });
+      return;
+    }
+
+    const ref = doc(firestore, 'users', userId);
+    deleteDoc(ref)
+      .then(() => {
+        toast({ title: "User Removed", description: `${name} has been purged from the institutional registry.` });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: ref.path,
+          operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -95,34 +150,53 @@ export default function UserManagementPage() {
       canDeleteMoa: formData.accessLevel === 'MANAGER'
     };
 
-    try {
-      if (selectedUser) {
-        const ref = doc(firestore, 'users', selectedUser.id);
-        await updateDoc(ref, {
-          fullName: formData.fullName,
-          role: formData.role,
-          ...accessFlags
+    if (selectedUser) {
+      const ref = doc(firestore, 'users', selectedUser.id);
+      const updates = {
+        fullName: formData.fullName,
+        role: formData.role,
+        ...accessFlags
+      };
+      updateDoc(ref, updates)
+        .then(() => {
+          toast({ title: "Profile Synchronized", description: `${formData.fullName}'s institutional record has been updated.` });
+          setIsEditing(false);
+          resetForm();
+        })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: ref.path,
+            operation: 'update',
+            requestResourceData: updates,
+          });
+          errorEmitter.emit('permission-error', permissionError);
         });
-        toast({ title: "Profile Synchronized", description: `${formData.fullName}'s institutional record has been updated.` });
-      } else {
-        const id = Math.random().toString(36).substr(2, 9);
-        const ref = doc(firestore, 'users', id);
-        await setDoc(ref, {
-          id,
-          fullName: formData.fullName,
-          email: formData.email,
-          role: formData.role,
-          ...accessFlags,
-          isBlocked: false,
-          createdAt: new Date().toISOString()
+    } else {
+      const id = Math.random().toString(36).substr(2, 9);
+      const ref = doc(firestore, 'users', id);
+      const finalData = {
+        id,
+        fullName: formData.fullName,
+        email: formData.email,
+        role: formData.role,
+        ...accessFlags,
+        isBlocked: false,
+        createdAt: new Date().toISOString()
+      };
+      setDoc(ref, finalData)
+        .then(() => {
+          toast({ title: "User Registered", description: `${formData.fullName} has been added to the institutional registry.` });
+          setIsAdding(false);
+          resetForm();
+        })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: ref.path,
+            operation: 'create',
+            requestResourceData: finalData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
         });
-        toast({ title: "User Registered", description: `${formData.fullName} has been added to the institutional registry.` });
-      }
-      setIsAdding(false);
-      setIsEditing(false);
-      resetForm();
-    } catch (error) {
-      toast({ title: "Registry Error", description: "Failed to synchronize user data with the server.", variant: "destructive" });
     }
   };
 
@@ -300,18 +374,46 @@ export default function UserManagementPage() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                         <Edit2 className="w-4 h-4" />
                       </Button>
-                      {u.id !== currentUser.id && (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleToggleBlock(u.id, !u.isBlocked, u.fullName)}
-                          className={cn(
-                            "h-8 w-8",
-                            u.isBlocked ? "text-green-600 hover:bg-green-50" : "text-destructive hover:bg-destructive/5"
-                          )}
-                        >
-                          {u.isBlocked ? <Unlock className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
-                        </Button>
+                      
+                      {u.id !== currentUser?.id && (
+                        <>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleToggleBlock(u.id, !u.isBlocked, u.fullName)}
+                            className={cn(
+                              "h-8 w-8",
+                              u.isBlocked ? "text-green-600 hover:bg-green-50" : "text-destructive hover:bg-destructive/5"
+                            )}
+                          >
+                            {u.isBlocked ? <Unlock className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                          </Button>
+
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Purge User Record?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently remove <strong>{u.fullName}</strong> from the institutional registry. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => handleDeleteUser(u.id, u.fullName)}
+                                  className="bg-destructive hover:bg-destructive/90"
+                                >
+                                  Delete Permanently
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
                       )}
                     </div>
                   </td>

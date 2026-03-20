@@ -27,7 +27,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == userId || hasRole('admin'));
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if hasRole('admin');
-      allow delete: if false;
+      allow delete: if hasRole('admin');
     }
 
     match /moas/{moaId} {
