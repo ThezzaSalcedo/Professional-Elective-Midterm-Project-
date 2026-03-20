@@ -14,12 +14,10 @@ import {
   Search,
   Loader2,
   Database,
-  ArrowRight,
-  ShieldAlert
+  ArrowRight
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { MOA, AuditEntry } from '../lib/types';
@@ -57,7 +55,7 @@ export default function DashboardPage() {
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user?.role]);
 
-  const { data: moas, isLoading: isMoaLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
+  const { data: moas, isLoading: isMoaLoading, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
   const activeInstitutionalMoas = useMemo(() => {
     if (!moas) return [];
@@ -119,7 +117,8 @@ export default function DashboardPage() {
     const statuses: any[] = [
       'APPROVED: Signed by President',
       'PROCESSING: Sent to Legal',
-      'APPROVED: No notarization needed'
+      'APPROVED: No notarization needed',
+      'APPROVED: On-going notarization'
     ];
 
     const today = new Date();
@@ -134,10 +133,11 @@ export default function DashboardPage() {
         timestamp: today.toISOString()
       };
       
-      // Seed with different expiration windows
       const expDate = new Date();
       if (status.includes('Legal')) {
         expDate.setMonth(expDate.getMonth() + 1); // Expiring soon
+      } else if (status.includes('notarization')) {
+        expDate.setMonth(expDate.getMonth() - 1); // Already expired
       } else {
         expDate.setFullYear(expDate.getFullYear() + 1); // Long term
       }
@@ -259,10 +259,12 @@ export default function DashboardPage() {
                             "text-[9px] font-bold uppercase",
                             isExpired ? "text-destructive" : daysLeft! <= 60 ? "text-orange-500" : "text-green-600"
                           )}>
-                            {isExpired ? "Expired" : `${formatDistanceToNow(expiry)} left`}
+                            {isExpired ? "Expired" : `${formatDistanceToNow(expiry)} remaining`}
                           </span>
                         </div>
-                      ) : "N/A"}
+                      ) : (
+                        <span className="text-muted-foreground italic text-[10px]">No date set</span>
+                      )}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-xs uppercase text-muted-foreground font-semibold">{m.industryType}</td>
                     <td className="px-4 sm:px-6 py-4">

@@ -18,7 +18,6 @@ import {
   Mail,
   User,
   MapPin,
-  History,
   Plus,
   Edit2,
   Sparkles,
@@ -87,7 +86,7 @@ export default function MoaListPage() {
   }, [moas, search, activeTab, user?.role]);
 
   const getExpirationDisplay = (dateStr: string) => {
-    if (!dateStr) return null;
+    if (!dateStr) return <span className="text-muted-foreground italic text-[10px]">No date set</span>;
     const date = new Date(dateStr);
     const now = new Date();
     const daysLeft = differenceInDays(date, now);
@@ -100,7 +99,7 @@ export default function MoaListPage() {
           "text-[10px] font-bold uppercase tracking-tighter",
           isExpired ? "text-destructive" : daysLeft <= 60 ? "text-orange-500" : "text-green-600"
         )}>
-          {isExpired ? "Expired" : `${formatDistanceToNow(date)} left`}
+          {isExpired ? "Expired" : `${formatDistanceToNow(date)} remaining`}
         </div>
       </div>
     );
@@ -230,7 +229,7 @@ export default function MoaListPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-primary">MOA Management</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Institutional repository for partnership agreements. Validity and expiration tracking enabled.
+            Institutional repository for partnership agreements with validity tracking.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
@@ -394,11 +393,11 @@ export default function MoaListPage() {
                                   <div className="grid grid-cols-2 gap-2">
                                     <div className="space-y-2">
                                       <Label>Effective Date</Label>
-                                      <Input type="date" required value={editMoa.effectiveDate.split('T')[0]} onChange={e => setEditMoa({...editMoa, effectiveDate: new Date(e.target.value).toISOString()})} />
+                                      <Input type="date" required value={editMoa.effectiveDate?.split('T')[0] || ''} onChange={e => setEditMoa({...editMoa, effectiveDate: new Date(e.target.value).toISOString()})} />
                                     </div>
                                     <div className="space-y-2">
                                       <Label>Expiration Date</Label>
-                                      <Input type="date" required value={editMoa.expirationDate.split('T')[0]} onChange={e => setEditMoa({...editMoa, expirationDate: new Date(e.target.value).toISOString()})} />
+                                      <Input type="date" required value={editMoa.expirationDate?.split('T')[0] || ''} onChange={e => setEditMoa({...editMoa, expirationDate: new Date(e.target.value).toISOString()})} />
                                     </div>
                                   </div>
                                 </div>
