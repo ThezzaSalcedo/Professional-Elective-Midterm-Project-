@@ -13,7 +13,6 @@ import {
   FileX2, 
   Search,
   Loader2,
-  AlertCircle,
   Database,
   ArrowRight
 } from 'lucide-react';
@@ -74,11 +73,10 @@ export default function DashboardPage() {
     const active = sourceSet.filter(m => m.status?.startsWith('APPROVED')).length;
     const processing = sourceSet.filter(m => m.status?.startsWith('PROCESSING')).length;
     
-    // Expiring Soon Logic: within 60 days
     const expiringSoon = sourceSet.filter(m => {
       if (!m.effectiveDate) return false;
       const expiry = new Date(m.effectiveDate);
-      expiry.setFullYear(expiry.getFullYear() + 1); // Mock 1-year duration
+      expiry.setFullYear(expiry.getFullYear() + 1); 
       const diffTime = expiry.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return diffDays > 0 && diffDays <= 60;
@@ -147,15 +145,15 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex items-center justify-between">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-12">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">System Overview</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">System Overview</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Authorized access for <span className="font-semibold text-primary capitalize">{user?.role}</span> accounts.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           {user?.role === 'admin' && (
             <Button variant="outline" size="sm" onClick={handleSeedData} disabled={isSeeding}>
               {isSeeding ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Seed Registry"}
@@ -169,65 +167,68 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((s) => (
           <StatsCard key={s.title} {...s} colorClass={s.color} />
         ))}
       </div>
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-        <div className="p-6 border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="p-4 sm:p-6 border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h3 className="font-bold text-lg">Institutional Partnerships</h3>
-            <p className="text-xs text-muted-foreground">Showing authorized records matching your filter.</p>
+            <h3 className="font-bold text-base sm:text-lg">Institutional Partnerships</h3>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Showing authorized records matching your filter.</p>
           </div>
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input className="pl-10 h-9" placeholder="Filter by company, college, address..." value={search} onChange={e => setSearch(e.target.value)} />
+            <Input className="pl-10 h-9 text-sm" placeholder="Filter agreements..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 border-b">
-            <tr>
-              <th className="px-6 py-4 text-left font-semibold">Partner Company</th>
-              <th className="px-6 py-4 text-left font-semibold">College</th>
-              <th className="px-6 py-4 text-left font-semibold">Industry</th>
-              <th className="px-6 py-4 text-left font-semibold">Authorization</th>
-              <th className="px-6 py-4 text-right"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {visibleMoas.length > 0 ? visibleMoas.map(m => (
-              <tr key={m.id} className="hover:bg-muted/5 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="font-semibold">{m.companyName}</div>
-                  <div className="text-[10px] text-muted-foreground">{m.hteId}</div>
-                </td>
-                <td className="px-6 py-4 text-xs font-medium">{m.college}</td>
-                <td className="px-6 py-4 text-xs">{m.industryType}</td>
-                <td className="px-6 py-4">
-                  <span className={cn(
-                    "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    m.status.startsWith('APPROVED') ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                  )}>
-                    {m.status.split(':')[0]}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <Button variant="ghost" size="sm" asChild className="h-8 w-8 p-0">
-                    <Link href="/dashboard/moas"><ArrowRight className="w-4 h-4" /></Link>
-                  </Button>
-                </td>
-              </tr>
-            )) : (
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm min-w-[600px]">
+            <thead className="bg-muted/50 border-b">
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
-                  {isMoaLoading ? "Synchronizing records..." : "No agreements found matching your criteria."}
-                </td>
+                <th className="px-4 sm:px-6 py-3 text-left font-semibold">Partner Company</th>
+                <th className="px-4 sm:px-6 py-3 text-left font-semibold">College</th>
+                <th className="px-4 sm:px-6 py-3 text-left font-semibold">Industry</th>
+                <th className="px-4 sm:px-6 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 sm:px-6 py-3 text-right w-16"></th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y">
+              {visibleMoas.length > 0 ? visibleMoas.map(m => (
+                <tr key={m.id} className="hover:bg-muted/5 transition-colors">
+                  <td className="px-4 sm:px-6 py-4">
+                    <div className="font-semibold line-clamp-1">{m.companyName}</div>
+                    <div className="text-[10px] text-muted-foreground">{m.hteId}</div>
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 text-xs font-medium">{m.college}</td>
+                  <td className="px-4 sm:px-6 py-4 text-xs">{m.industryType}</td>
+                  <td className="px-4 sm:px-6 py-4">
+                    <span className={cn(
+                      "px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase whitespace-nowrap",
+                      m.status.startsWith('APPROVED') ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                    )}>
+                      {m.status.split(':')[0]}
+                    </span>
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 text-right">
+                    <Button variant="ghost" size="sm" asChild className="h-8 w-8 p-0">
+                      <Link href="/dashboard/moas"><ArrowRight className="w-4 h-4" /></Link>
+                    </Button>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={5} className="px-4 sm:px-6 py-12 text-center text-muted-foreground">
+                    {isMoaLoading ? "Synchronizing records..." : "No agreements found matching your criteria."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

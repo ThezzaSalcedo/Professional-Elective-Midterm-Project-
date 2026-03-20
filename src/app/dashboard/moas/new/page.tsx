@@ -69,7 +69,7 @@ export default function NewMoaPage() {
       userId: firebaseUser.uid,
       userName: user.name,
       timestamp: new Date().toISOString(),
-      operation: 'INSERT' // Uppercase audit operation
+      operation: 'INSERT'
     };
 
     const finalData = {
@@ -98,24 +98,24 @@ export default function NewMoaPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto py-8">
+    <div className="max-w-3xl mx-auto py-4 sm:py-8">
       <Link href="/dashboard" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6">
         <ChevronLeft className="w-4 h-4" />
         Back to Dashboard
       </Link>
 
-      <Card className="shadow-lg border-none">
-        <CardHeader className="bg-primary text-primary-foreground rounded-t-xl">
-          <CardTitle className="text-2xl flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-lg">
-              <Sparkles className="w-6 h-6" />
+      <Card className="shadow-lg border-none overflow-hidden">
+        <CardHeader className="bg-primary text-primary-foreground">
+          <CardTitle className="text-xl sm:text-2xl flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-lg shrink-0">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             New Partnership Agreement
           </CardTitle>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-6 pt-8">
-            <div className="grid grid-cols-2 gap-6">
+          <CardContent className="space-y-6 pt-6 sm:pt-8 px-4 sm:px-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div className="space-y-2">
                 <Label htmlFor="hteId">HTE ID</Label>
                 <Input id="hteId" placeholder="e.g. HTE-2024-001" required value={formData.hteId} onChange={e => setFormData({...formData, hteId: e.target.value})} />
@@ -128,16 +128,16 @@ export default function NewMoaPage() {
 
             <div className="space-y-2">
               <Label htmlFor="companyName">Company Name</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Input id="companyName" className="flex-1" placeholder="Enter company name" required value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} />
-                <Button type="button" variant="outline" onClick={handleClassify} disabled={isClassifying} className="gap-2 border-accent text-accent hover:bg-accent/10">
+                <Button type="button" variant="outline" onClick={handleClassify} disabled={isClassifying} className="gap-2 border-accent text-accent hover:bg-accent/10 w-full sm:w-auto shrink-0">
                   {isClassifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   Classify
                 </Button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div className="space-y-2">
                 <Label htmlFor="industryType">Industry Type</Label>
                 <Select value={formData.industryType} onValueChange={(val) => setFormData({...formData, industryType: val})}>
@@ -148,8 +148,9 @@ export default function NewMoaPage() {
                     <SelectItem value="Telecom">Telecom</SelectItem>
                     <SelectItem value="Food">Food</SelectItem>
                     <SelectItem value="Services">Services</SelectItem>
-                    <SelectItem value="Tech">Tech</SelectItem>
+                    <SelectItem value="Technology">Technology</SelectItem>
                     <SelectItem value="Finance">Finance</SelectItem>
+                    <SelectItem value="Education">Education</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -164,7 +165,7 @@ export default function NewMoaPage() {
               <Input id="address" placeholder="Full business address" required value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div className="space-y-2">
                 <Label htmlFor="contactPerson">Contact Person</Label>
                 <Input id="contactPerson" placeholder="Full name of representative" required value={formData.contactPerson} onChange={e => setFormData({...formData, contactPerson: e.target.value})} />
@@ -192,9 +193,9 @@ export default function NewMoaPage() {
               </Select>
             </div>
           </CardContent>
-          <CardFooter className="flex justify-end gap-3 pb-8">
-            <Button variant="ghost" type="button" onClick={() => router.back()}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 px-8">
+          <CardFooter className="flex flex-col-reverse sm:flex-row justify-end gap-3 pb-8 px-4 sm:px-6 pt-4">
+            <Button variant="ghost" type="button" onClick={() => router.back()} className="w-full sm:w-auto">Cancel</Button>
+            <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 w-full sm:w-auto min-w-[140px]">
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Save Agreement"}
             </Button>
           </CardFooter>
