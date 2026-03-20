@@ -10,12 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Loader2, AlertCircle, GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { doc, setDoc } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
+import { cn } from '@/lib/utils';
 
 export default function HomePage() {
   const { user, firebaseUser, isLoading: isAuthLoading, logout } = useAuth();
@@ -40,21 +41,27 @@ export default function HomePage() {
     }
   }, [user, isAuthLoading, router, hasMounted]);
 
+  const validateDomain = (emailToTest: string) => {
+    const lower = emailToTest.toLowerCase().trim();
+    if (!lower.endsWith('@neu.edu.ph')) {
+      setErrorMessage("Please use your official university email.");
+      return false;
+    }
+    setErrorMessage(null);
+    return true;
+  };
+
   const createProfile = async (uid: string, userEmail: string, name: string) => {
     const lowerEmail = userEmail.toLowerCase();
     
-    // Safety check: ensure domain is correct before DB write
     if (!lowerEmail.endsWith('@neu.edu.ph')) {
+      router.push('/restricted');
       throw new Error("Access Denied: Please use your @neu.edu.ph institutional account.");
     }
 
     let roleName: 'admin' | 'faculty' | 'student' = 'student';
-
-    if (lowerEmail.includes('admin')) {
-      roleName = 'admin';
-    } else if (lowerEmail.includes('faculty')) {
-      roleName = 'faculty';
-    }
+    if (lowerEmail.includes('admin')) roleName = 'admin';
+    else if (lowerEmail.includes('faculty')) roleName = 'faculty';
 
     const userRef = doc(firestore, 'users', uid);
     await setDoc(userRef, {
@@ -72,8 +79,7 @@ export default function HomePage() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
-    if (!email || !password) return;
+    if (!validateDomain(email)) return;
     
     setIsProcessing(true);
     try {
@@ -87,11 +93,38 @@ export default function HomePage() {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setErrorMessage("Please enter your institutional email first.");
-      return;
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateDomain(email)) return;
+    if (!fullName || !password) return;
+
+    setIsProcessing(true);
+    try {
+      const cred = await initiateEmailSignUp(auth, email, password);
+      await createProfile(cred.user.uid, email, fullName);
+    } catch (error: any) {
+      setIsProcessing(false);
+      setErrorMessage(error.message || "Failed to create account.");
     }
+  };
+
+  const handleGoogleLogin = async () => {
+    // If they typed an email, check it first as a hint
+    if (email && !validateDomain(email)) return;
+
+    setIsProcessing(true);
+    try {
+      await initiateGoogleSignIn(auth);
+    } catch (error: any) {
+      setIsProcessing(false);
+      if (error.code !== 'auth/popup-closed-by-user') {
+        setErrorMessage(error.message || "Could not connect to Google.");
+      }
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!validateDomain(email)) return;
     setIsProcessing(true);
     try {
       await sendPasswordResetEmail(auth, email);
@@ -107,158 +140,127 @@ export default function HomePage() {
     }
   };
 
-  const handleEmailSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    if (!email || !password || !fullName) return;
-
-    if (!email.toLowerCase().endsWith('@neu.edu.ph')) {
-      setErrorMessage("Institutional email (@neu.edu.ph) is required.");
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      const cred = await initiateEmailSignUp(auth, email, password);
-      await createProfile(cred.user.uid, email, fullName);
-    } catch (error: any) {
-      setIsProcessing(false);
-      setErrorMessage(error.message || "Failed to create account.");
-    }
-  };
-
-  const handleFinishProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!firebaseUser || !fullName) return;
-    setIsProcessing(true);
-    try {
-      await createProfile(firebaseUser.uid, firebaseUser.email!, fullName);
-    } catch (err: any) {
-      setIsProcessing(false);
-      setErrorMessage(err.message || "Failed to save profile.");
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setIsProcessing(true);
-    try {
-      await initiateGoogleSignIn(auth);
-    } catch (error: any) {
-      setIsProcessing(false);
-      if (error.code !== 'auth/popup-closed-by-user') {
-        setErrorMessage(error.message || "Could not connect to Google.");
-      }
-    }
-  };
-
   if (!hasMounted) return null;
 
-  if (isAuthLoading && firebaseUser) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground font-medium">Verifying Account...</p>
-      </div>
-    );
-  }
-
-  if (firebaseUser && !user && !isAuthLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
-          <h2 className="text-2xl font-bold text-center mb-6">Complete Your Profile</h2>
-          <form onSubmit={handleFinishProfile} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Full Name</Label>
-              <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter your full name" />
-            </div>
-            <Button className="w-full" disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Finish Registration"}
-            </Button>
-            <Button variant="ghost" className="w-full" onClick={logout} type="button">Sign Out</Button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border">
-        <div className="text-center mb-8">
-          <ShieldCheck className="w-12 h-12 text-primary mx-auto mb-4" />
-          <h1 className="text-3xl font-bold">MOA Track</h1>
-          <p className="text-muted-foreground">Institutional Partnership Registry</p>
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
+      {/* Background Layer with NEU Theme */}
+      <div 
+        className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
+        style={{ 
+          backgroundImage: 'url("https://images.unsplash.com/photo-1541339907198-e08756ebafe3?q=80&w=2070&auto=format&fit=crop")',
+          filter: 'blur(10px) brightness(0.6)'
+        }}
+      />
+
+      {/* Main Login Card - Glassmorphism */}
+      <div className="relative z-10 max-w-md w-full bg-white/80 backdrop-blur-[15px] rounded-[2.5rem] shadow-2xl p-8 border border-white/20 animate-in fade-in zoom-in duration-500">
+        <div className="text-center mb-10">
+          <div className="w-20 h-20 bg-[#800000] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl transform -rotate-3 hover:rotate-0 transition-transform duration-300">
+            <GraduationCap className="w-12 h-12 text-white" />
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#0f172a]">NEU Library</h1>
+          <p className="text-[#004d00] font-bold text-sm uppercase tracking-widest mt-1">MOA Portal</p>
         </div>
 
         {errorMessage && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{errorMessage}</AlertDescription>
+          <Alert variant="destructive" className="mb-6 bg-red-50 border-red-200">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-700 font-medium">{errorMessage}</AlertDescription>
           </Alert>
         )}
 
         <Tabs defaultValue="login" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="login">Sign In</TabsTrigger>
-            <TabsTrigger value="signup">Register</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-8 bg-muted/50 p-1 rounded-xl">
+            <TabsTrigger value="login" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-[#800000]">Sign In</TabsTrigger>
+            <TabsTrigger value="signup" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-[#800000]">Register</TabsTrigger>
           </TabsList>
 
           <TabsContent value="login">
-            <form onSubmit={handleEmailLogin} className="space-y-4">
+            <form onSubmit={handleEmailLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Email (@neu.edu.ph)</Label>
-                <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@neu.edu.ph" />
+                <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Institutional Email</Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  required 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  placeholder="name@neu.edu.ph" 
+                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000] transition-all"
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                <div className="flex items-center justify-between ml-1">
+                  <Label htmlFor="password" title="Password must be institutional" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Password</Label>
+                  <button type="button" onClick={handleForgotPassword} className="text-[10px] font-black uppercase text-[#800000] hover:underline">Forgot?</button>
+                </div>
+                <Input 
+                  id="password" 
+                  type="password" 
+                  required 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000] transition-all"
+                />
               </div>
-              <div className="flex flex-col gap-3">
-                <Button type="submit" className="w-full" disabled={isProcessing}>
-                  {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Sign In"}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  size="sm" 
-                  className="text-muted-foreground text-xs"
-                  onClick={handleForgotPassword}
-                  disabled={isProcessing}
-                >
-                  Forgot institutional password?
-                </Button>
-              </div>
+              <Button type="submit" className="w-full h-12 rounded-xl bg-[#800000] hover:bg-[#600000] font-bold text-base shadow-lg transition-all" disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Access Portal"}
+              </Button>
             </form>
           </TabsContent>
 
           <TabsContent value="signup">
-            <form onSubmit={handleEmailSignUp} className="space-y-4">
+            <form onSubmit={handleEmailSignUp} className="space-y-5">
               <div className="space-y-2">
-                <Label>Full Name</Label>
-                <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full Name" />
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Full Legal Name</Label>
+                <Input 
+                  required 
+                  value={fullName} 
+                  onChange={(e) => setFullName(e.target.value)} 
+                  placeholder="e.g. Juan Dela Cruz" 
+                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000]"
+                />
               </div>
               <div className="space-y-2">
-                <Label>Email (@neu.edu.ph)</Label>
-                <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@neu.edu.ph" />
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Institutional Email</Label>
+                <Input 
+                  type="email" 
+                  required 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  placeholder="name@neu.edu.ph" 
+                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000]"
+                />
               </div>
               <div className="space-y-2">
-                <Label>Password</Label>
-                <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Set Password</Label>
+                <Input 
+                  type="password" 
+                  required 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  className="h-12 rounded-xl bg-white border-muted focus-visible:ring-[#800000]"
+                />
               </div>
-              <Button type="submit" className="w-full" disabled={isProcessing}>
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Create Account"}
+              <Button type="submit" className="w-full h-12 rounded-xl bg-[#004d00] hover:bg-[#003300] font-bold text-base shadow-lg" disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Create Account"}
               </Button>
             </form>
           </TabsContent>
         </Tabs>
 
-        <div className="relative my-8">
-          <Separator />
-          <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-muted-foreground">OR</span>
+        <div className="relative my-10">
+          <Separator className="bg-muted-foreground/20" />
+          <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent px-4 text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Institutional Access</span>
         </div>
 
-        <Button variant="outline" className="w-full gap-2" onClick={handleGoogleLogin} disabled={isProcessing}>
+        <Button 
+          variant="outline" 
+          className="w-full h-12 rounded-xl gap-3 border-muted-foreground/20 bg-white/50 hover:bg-white font-bold transition-all shadow-sm" 
+          onClick={handleGoogleLogin} 
+          disabled={isProcessing}
+        >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -267,6 +269,10 @@ export default function HomePage() {
           </svg>
           Google Institutional Login
         </Button>
+        
+        <p className="mt-8 text-center text-[10px] text-muted-foreground/60 font-medium tracking-tight leading-relaxed">
+          BY ACCESSING THIS PORTAL, YOU AGREE TO THE UNIVERSITY'S DATA PRIVACY POLICY AND ACCEPT RESPONSIBILITY FOR INSTITUTIONAL DATA INTEGRITY.
+        </p>
       </div>
     </div>
   );
