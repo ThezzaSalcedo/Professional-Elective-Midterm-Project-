@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -154,8 +155,8 @@ export default function HomePage() {
       />
 
       {/* Institutional Logo Header */}
-      <div className="relative z-10 mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
-        <div className="relative group">
+      <div className="relative z-10 mb-8 animate-in fade-in slide-in-from-top-4 duration-700 text-center">
+        <div className="relative group inline-block mb-4">
           <div className="absolute -inset-4 bg-white/20 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
           <img 
             src={NEU_LOGO_URL} 
@@ -163,13 +164,13 @@ export default function HomePage() {
             className="w-32 h-32 sm:w-40 sm:h-40 relative drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]"
           />
         </div>
+        <h1 className="text-3xl font-black tracking-tight text-white drop-shadow-md uppercase">NEU MOA PORTAL</h1>
       </div>
 
       {/* Main Login Card - High-end Glassmorphism */}
       <div className="relative z-10 max-w-md w-full bg-white/80 backdrop-blur-[15px] rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-8 sm:p-10 border border-white/40 animate-in fade-in zoom-in duration-700">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#0f172a]">NEU MOA</h1>
-          <p className="text-[#004d00] font-black text-xs uppercase tracking-[0.2em] mt-2">PORTAL</p>
+          <p className="text-[#004d00] font-black text-xs uppercase tracking-[0.2em]">Institutional Access Gateway</p>
         </div>
 
         {errorMessage && (

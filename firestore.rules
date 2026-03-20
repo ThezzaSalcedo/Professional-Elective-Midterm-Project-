@@ -9,11 +9,14 @@ service cloud.firestore {
     }
 
     // Helper: Check if the email belongs to the institutional domain
+    // Uses a robust case-insensitive regex for domain verification
     function isInstitutionalEmail() {
-      return isSignedIn() && request.auth.token.email.lower().endsWith('@neu.edu.ph');
+      return isSignedIn() && 
+             request.auth.token.email != null && 
+             request.auth.token.email.matches('(?i).*@neu\\.edu\\.ph$');
     }
 
-    // Helper: Get user document
+    // Helper: Get user document safely without triggering recursive rule failures
     function getUserData() {
       let path = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(path) ? get(path).data : null;
@@ -21,54 +24,49 @@ service cloud.firestore {
 
     // Helper: Check if user has a specific role
     function hasRole(role) {
-      let userData = getUserData();
-      return isSignedIn() && isInstitutionalEmail() && userData != null && userData.role == role;
+      let data = getUserData();
+      return isSignedIn() && data != null && data.role == role;
     }
 
     // Helper: Check if user is blocked
     function isNotBlocked() {
-      let userData = getUserData();
-      return isSignedIn() && isInstitutionalEmail() && userData != null && userData.isBlocked == false;
+      let data = getUserData();
+      return isSignedIn() && data != null && data.isBlocked == false;
     }
 
     match /users/{userId} {
-      // Allow users to read their own profile, or admins to read any profile
-      allow read: if isSignedIn() && isInstitutionalEmail() && (request.auth.uid == userId || hasRole('admin'));
+      // Users can read and create their own profile during initial signup
+      // Admins can read any profile for registry management
+      allow read, create: if isSignedIn() && isInstitutionalEmail() && (request.auth.uid == userId || hasRole('admin'));
       
-      // Allow users to create their own profile during signup, or admins to register new institutional users
-      allow create: if isSignedIn() && isInstitutionalEmail() && (request.auth.uid == userId || hasRole('admin'));
-      
-      // Only admins can modify or delete institutional profiles
-      allow update: if hasRole('admin');
-      allow delete: if hasRole('admin');
+      // Profile modifications restricted to administrative roles
+      allow update: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
+      allow delete: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
     }
 
     match /moas/{moaId} {
       // Visibility logic: 
       // Admins/Faculty see all active records.
-      // Students strictly see only approved, non-deleted records.
+      // Students see only approved, non-deleted records.
       allow list, get: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
         (hasRole('student') && 
          resource.data.isDeleted == false && 
-         resource.data.status >= 'APPROVED' && 
-         resource.data.status < 'APPROVEE')
+         resource.data.status.upper().matches('APPROVED.*'))
       );
 
-      // Creation requires institutional right (Admin or authorized Faculty)
+      // Record lifecycle management restricted to authorized institutional actors
       allow create: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canAddMoa == true)
       );
 
-      // Updating (including soft delete) requires institutional right
       allow update: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canEditMoa == true)
       );
 
-      // Hard delete restricted to administrative purging
       allow delete: if isSignedIn() && isInstitutionalEmail() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canDeleteMoa == true)
@@ -76,6 +74,7 @@ service cloud.firestore {
     }
 
     match /audit_logs/{logId} {
+      // Audit logs are immutable and strictly for administrative oversight
       allow read: if isSignedIn() && isInstitutionalEmail() && hasRole('admin');
       allow create: if isSignedIn() && isInstitutionalEmail() && isNotBlocked();
     }
