@@ -24,14 +24,19 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
+      // Allow users to read their own profile, or admins to read any profile
       allow read: if isSignedIn() && (request.auth.uid == userId || hasRole('admin'));
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      
+      // Allow users to create their own profile during signup, or admins to register new institutional users
+      allow create: if isSignedIn() && (request.auth.uid == userId || hasRole('admin'));
+      
+      // Only admins can modify or delete institutional profiles
       allow update: if hasRole('admin');
       allow delete: if hasRole('admin');
     }
 
     match /moas/{moaId} {
-      // Students see only APPROVED active records. 
+      // Visibility logic: Students see only approved records; Faculty/Admins see active records.
       allow list, get: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
@@ -41,7 +46,7 @@ service cloud.firestore {
          resource.data.status < 'APPROVEE')
       );
 
-      // Creation requires institutional right
+      // Creation requires institutional right (Admin or authorized Faculty)
       allow create: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canAddMoa == true)
@@ -53,7 +58,7 @@ service cloud.firestore {
         (hasRole('faculty') && getUserData().canEditMoa == true)
       );
 
-      // Hard delete restricted to Manager/Admin via soft-delete logic
+      // Hard delete restricted via specialized logic if needed, currently using permissions
       allow delete: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canDeleteMoa == true)
