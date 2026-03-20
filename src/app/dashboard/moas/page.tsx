@@ -22,7 +22,8 @@ import {
   Plus,
   Edit2,
   Sparkles,
-  Save
+  Save,
+  ShieldAlert
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ export default function MoaListPage() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Dynamic real-time query based on user role
+  // Dynamic real-time query based strictly on user role and visibility rules
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
@@ -56,7 +57,8 @@ export default function MoaListPage() {
     // Admins see all records for full oversight
     if (user.role === 'admin') return base;
     
-    // Students see only approved, non-deleted records
+    // Students see strictly approved, non-deleted records. 
+    // This range captures all strings prefixed with "APPROVED"
     if (user.role === 'student') {
       return query(base, 
         where('isDeleted', '==', false), 
@@ -65,7 +67,7 @@ export default function MoaListPage() {
       );
     }
     
-    // Faculty see all active records
+    // Faculty see all active institutional records
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user?.role, user?.id]);
 
@@ -194,16 +196,19 @@ export default function MoaListPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-primary">MOA Management</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Institutional repository for partnership agreements. Changes are pushed in real-time.
+            {user?.role === 'student' 
+              ? "Institutional repository for approved partnership agreements." 
+              : "Institutional repository for partnership agreements. Changes are pushed in real-time."
+            }
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative w-full lg:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input className="pl-10 h-10 text-sm" placeholder="Search registry..." value={search} onChange={e => setSearch(e.target.value)} />
+            <Input className="pl-10 h-10 text-sm border-primary/20" placeholder="Search registry..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           {user?.canAddMoa && (
-            <Button asChild className="gap-2">
+            <Button asChild className="gap-2 shadow-md">
               <Link href="/dashboard/moas/new">
                 <Plus className="w-4 h-4" />
                 Add Agreement
@@ -238,15 +243,15 @@ export default function MoaListPage() {
               {filteredMoas.length > 0 ? filteredMoas.map(m => (
                 <tr key={m.id} className={cn("hover:bg-muted/5 transition-colors", m.isDeleted && "bg-muted/30 opacity-60")}>
                   <td className="px-6 py-4">
-                    <div className="font-bold flex items-center gap-2 truncate max-w-[200px]">
+                    <div className="font-bold flex items-center gap-2 truncate max-w-[200px] text-foreground">
                       {m.companyName}
                       {m.isDeleted && <span className="bg-destructive/10 text-destructive text-[8px] px-1.5 py-0.5 rounded uppercase font-bold shrink-0">Trash</span>}
                     </div>
-                    <div className="text-[10px] text-muted-foreground uppercase font-medium">{m.hteId}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">{m.hteId}</div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-medium text-xs truncate max-w-[150px]">{m.college}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{m.industryType}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{m.industryType}</div>
                   </td>
                   <td className="px-6 py-4">
                     <span className={cn(
@@ -260,12 +265,12 @@ export default function MoaListPage() {
                     <div className="flex justify-end gap-1">
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => setSelectedMoa(m)} className="h-8 w-8"><Eye className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => setSelectedMoa(m)} className="h-8 w-8 hover:bg-primary/10 hover:text-primary"><Eye className="w-4 h-4" /></Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl w-[95vw] sm:w-full overflow-y-auto max-h-[90vh]">
                           <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2">
-                              <FileText className="w-5 h-5 text-primary" />
+                            <DialogTitle className="flex items-center gap-2 text-primary">
+                              <FileText className="w-5 h-5" />
                               Agreement Details
                             </DialogTitle>
                           </DialogHeader>
@@ -274,7 +279,7 @@ export default function MoaListPage() {
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                                 <div className="space-y-4">
                                   <div className="flex items-start gap-3">
-                                    <Building2 className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
+                                    <Building2 className="w-4 h-4 text-primary mt-1 shrink-0" />
                                     <div>
                                       <Label className="text-[10px] uppercase font-bold text-muted-foreground">Partner Entity</Label>
                                       <div className="font-semibold text-base leading-tight">{selectedMoa.companyName}</div>
@@ -282,7 +287,7 @@ export default function MoaListPage() {
                                     </div>
                                   </div>
                                   <div className="flex items-start gap-3">
-                                    <MapPin className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
+                                    <MapPin className="w-4 h-4 text-primary mt-1 shrink-0" />
                                     <div>
                                       <Label className="text-[10px] uppercase font-bold text-muted-foreground">Office Address</Label>
                                       <div className="text-xs leading-relaxed mt-1">{selectedMoa.address}</div>
@@ -291,21 +296,21 @@ export default function MoaListPage() {
                                 </div>
                                 <div className="space-y-4">
                                   <div className="flex items-start gap-3">
-                                    <User className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
+                                    <User className="w-4 h-4 text-primary mt-1 shrink-0" />
                                     <div>
                                       <Label className="text-[10px] uppercase font-bold text-muted-foreground">Contact Representative</Label>
                                       <div className="font-medium mt-1">{selectedMoa.contactPerson}</div>
                                     </div>
                                   </div>
                                   <div className="flex items-start gap-3">
-                                    <Mail className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
+                                    <Mail className="w-4 h-4 text-primary mt-1 shrink-0" />
                                     <div>
                                       <Label className="text-[10px] uppercase font-bold text-muted-foreground">Direct Email</Label>
                                       <div className="text-xs mt-1">{selectedMoa.contactEmail}</div>
                                     </div>
                                   </div>
                                   <div className="flex items-start gap-3">
-                                    <Calendar className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
+                                    <Calendar className="w-4 h-4 text-primary mt-1 shrink-0" />
                                     <div>
                                       <Label className="text-[10px] uppercase font-bold text-muted-foreground">Effective Date</Label>
                                       <div className="text-xs font-medium mt-1">{new Date(selectedMoa.effectiveDate).toLocaleDateString()}</div>
@@ -315,13 +320,13 @@ export default function MoaListPage() {
                               </div>
                               
                               {user?.role === 'admin' && selectedMoa.auditTrail && (
-                                <div className="border-t pt-4">
+                                <div className="border-t pt-4 bg-muted/20 p-4 rounded-lg">
                                   <div className="flex items-center gap-2 font-bold mb-4 text-primary text-[11px] uppercase tracking-tight">
                                     <History className="w-4 h-4" /> System Audit Trail
                                   </div>
                                   <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                                     {selectedMoa.auditTrail.map((a, i) => (
-                                      <div key={i} className="flex justify-between items-center text-[11px] p-2 bg-muted/30 rounded border border-border/50">
+                                      <div key={i} className="flex justify-between items-center text-[11px] p-2 bg-white rounded border border-border/50 shadow-sm">
                                         <div className="flex flex-col">
                                           <span className="font-bold text-foreground truncate max-w-[120px]">{a.userName}</span>
                                           <span className="text-[9px] text-muted-foreground italic">{new Date(a.timestamp).toLocaleString()}</span>
@@ -347,7 +352,7 @@ export default function MoaListPage() {
                       {user?.canEditMoa && !m.isDeleted && (
                         <Dialog open={!!editMoa && editMoa.id === m.id} onOpenChange={(open) => setEditMoa(open ? m : null)}>
                           <DialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary"><Edit2 className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10"><Edit2 className="w-4 h-4" /></Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl w-[95vw] sm:w-full overflow-y-auto max-h-[90vh]">
                             <DialogHeader>
@@ -370,7 +375,7 @@ export default function MoaListPage() {
                                   <Label>Company Name</Label>
                                   <div className="flex gap-2">
                                     <Input required className="flex-1" value={editMoa.companyName} onChange={e => setEditMoa({...editMoa, companyName: e.target.value})} />
-                                    <Button type="button" variant="outline" size="icon" onClick={handleClassify} disabled={isClassifying}>
+                                    <Button type="button" variant="outline" size="icon" onClick={handleClassify} disabled={isClassifying} className="border-primary text-primary hover:bg-primary/5">
                                       {isClassifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                                     </Button>
                                   </div>
@@ -435,7 +440,7 @@ export default function MoaListPage() {
                                 </div>
 
                                 <DialogFooter className="pt-4">
-                                  <Button type="submit" disabled={isUpdating} className="w-full gap-2">
+                                  <Button type="submit" disabled={isUpdating} className="w-full gap-2 shadow-md">
                                     {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                     Save Changes
                                   </Button>
@@ -459,7 +464,7 @@ export default function MoaListPage() {
               )) : (
                 <tr>
                   <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic">
-                    {activeTab === 'trash' ? "Trash bin is empty." : "No records found."}
+                    {activeTab === 'trash' ? "Trash bin is empty." : "No authorized records found."}
                   </td>
                 </tr>
               )}

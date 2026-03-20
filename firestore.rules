@@ -36,7 +36,9 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Visibility logic: Students see only approved records; Faculty/Admins see active records.
+      // Visibility logic: 
+      // Admins/Faculty see all active records.
+      // Students strictly see only approved, non-deleted records.
       allow list, get: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
@@ -58,7 +60,7 @@ service cloud.firestore {
         (hasRole('faculty') && getUserData().canEditMoa == true)
       );
 
-      // Hard delete restricted via specialized logic if needed, currently using permissions
+      // Hard delete restricted to administrative purging
       allow delete: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         (hasRole('faculty') && getUserData().canDeleteMoa == true)

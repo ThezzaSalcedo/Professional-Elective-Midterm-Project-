@@ -14,7 +14,8 @@ import {
   Search,
   Loader2,
   Database,
-  ArrowRight
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -37,7 +38,7 @@ export default function DashboardPage() {
     setNow(new Date());
   }, []);
 
-  // Dynamic query based on role
+  // Dynamic real-time query strictly governed by user role
   const moaQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const base = collection(firestore, 'moas');
@@ -45,7 +46,8 @@ export default function DashboardPage() {
     // Admins see all for oversight, but we'll filter for stats
     if (user.role === 'admin') return base;
     
-    // Students see only approved, non-deleted records
+    // Students see ONLY approved, non-deleted records. 
+    // This query range captures all statuses starting with "APPROVED"
     if (user.role === 'student') {
       return query(base, 
         where('isDeleted', '==', false),
@@ -54,14 +56,14 @@ export default function DashboardPage() {
       );
     }
     
-    // Faculty see all active records
+    // Faculty see all active (non-deleted) records
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user?.role]);
 
   const { data: moas, isLoading: isMoaLoading, error, isIndexBuilding } = useMoaCollection<MOA>(moaQuery);
 
-  // Filter moas for the overview table and stats
-  // We strictly show non-deleted records in the overview for all roles to ensure card accuracy
+  // Filter moas for the overview table and stats.
+  // This ensures that the Admin dashboard counts only active (non-deleted) records in the overview.
   const activeInstitutionalMoas = useMemo(() => {
     if (!moas) return [];
     return moas.filter(m => !m.isDeleted);
@@ -70,11 +72,12 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     if (!activeInstitutionalMoas) return [];
     
+    // Accuracy check: filter based on institutional status logic
     const active = activeInstitutionalMoas.filter(m => m.status?.startsWith('APPROVED')).length;
     const processing = activeInstitutionalMoas.filter(m => m.status?.startsWith('PROCESSING')).length;
     
     const expiringSoon = activeInstitutionalMoas.filter(m => {
-      if (!m.effectiveDate) return false;
+      if (!m.effectiveDate || !m.status?.startsWith('APPROVED')) return false;
       // Standard university MOA 1-year duration check
       const expiry = new Date(m.effectiveDate);
       expiry.setFullYear(expiry.getFullYear() + 1); 
@@ -96,7 +99,6 @@ export default function DashboardPage() {
   const visibleMoas = useMemo(() => {
     if (!activeInstitutionalMoas) return [];
     
-    if (!search) return activeInstitutionalMoas;
     const q = search.toLowerCase();
     return activeInstitutionalMoas.filter(m => 
       m.companyName.toLowerCase().includes(q) ||
@@ -110,40 +112,46 @@ export default function DashboardPage() {
   const handleSeedData = async () => {
     if (!firestore || !user || !firebaseUser) return;
     setIsSeeding(true);
-    const id = Math.random().toString(36).substr(2, 9);
-    const ref = doc(firestore, 'moas', id);
-    const audit: AuditEntry = {
-      userId: firebaseUser.uid,
-      userName: user.fullName || 'User',
-      operation: 'INSERT',
-      timestamp: new Date().toISOString()
-    };
     
-    const sampleMoa = {
-      id,
-      hteId: 'HTE-2024-001',
-      companyName: 'Global Technology Solutions',
-      address: '123 Innovation Way, Makati City',
-      contactPerson: 'Maria Rodriguez',
-      contactEmail: 'm.rodriguez@globaltech.com',
-      industryType: 'Technology',
-      effectiveDate: new Date().toISOString(),
-      college: 'College of Computer Studies',
-      status: 'APPROVED: Signed by President',
-      isDeleted: false,
-      auditTrail: [audit],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    // Add multiple sample records for testing role-based visibility
+    const statuses: any[] = [
+      'APPROVED: Signed by President',
+      'PROCESSING: Sent to Legal',
+      'APPROVED: No notarization needed'
+    ];
 
-    try {
+    for (const status of statuses) {
+      const id = Math.random().toString(36).substr(2, 9);
+      const ref = doc(firestore, 'moas', id);
+      const audit: AuditEntry = {
+        userId: firebaseUser.uid,
+        userName: user.fullName || 'User',
+        operation: 'INSERT',
+        timestamp: new Date().toISOString()
+      };
+      
+      const sampleMoa = {
+        id,
+        hteId: `HTE-2024-${Math.floor(Math.random() * 1000)}`,
+        companyName: status.startsWith('APPROVED') ? 'Approved Partner Corp' : 'Pending Partner Inc',
+        address: 'Academic District, Quezon City',
+        contactPerson: 'Institutional Liaison',
+        contactEmail: 'liaison@partner.com',
+        industryType: 'Education',
+        effectiveDate: new Date().toISOString(),
+        college: 'University Center',
+        status: status,
+        isDeleted: false,
+        auditTrail: [audit],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
       await setDoc(ref, sampleMoa);
-      toast({ title: "Seeding Complete", description: "Sample institutional agreement added." });
-    } catch (err) {
-      toast({ title: "Seeding Failed", variant: "destructive" });
-    } finally {
-      setIsSeeding(false);
     }
+    
+    toast({ title: "Registry Seeded", description: "Sample institutional agreements added for testing visibility." });
+    setIsSeeding(false);
   };
 
   if (isAuthLoading || (isMoaLoading && !isIndexBuilding)) {
@@ -159,15 +167,16 @@ export default function DashboardPage() {
     <div className="space-y-8 animate-in fade-in duration-500 pb-12">
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">System Overview</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary">System Overview</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Authorized access for <span className="font-semibold text-primary capitalize">{user?.role}</span> accounts.
+            Institutional access for <span className="font-semibold text-primary capitalize">{user?.role}</span> account: <span className="font-bold">{user?.fullName}</span>.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           {user?.role === 'admin' && (
-            <Button variant="outline" size="sm" onClick={handleSeedData} disabled={isSeeding}>
-              {isSeeding ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Seed Registry"}
+            <Button variant="outline" size="sm" onClick={handleSeedData} disabled={isSeeding} className="gap-2">
+              <Database className="w-4 h-4" />
+              Seed Registry
             </Button>
           )}
           {user?.canAddMoa && (
@@ -180,8 +189,8 @@ export default function DashboardPage() {
 
       {error && (
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Synchronization Error</AlertTitle>
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Security Warning</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       )}
@@ -196,6 +205,7 @@ export default function DashboardPage() {
         </Alert>
       )}
 
+      {/* Accuracy Layer: StatsCards dynamically reflect authorized data visibility */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((s) => (
           <StatsCard key={s.title} {...s} colorClass={s.color} />
@@ -203,14 +213,19 @@ export default function DashboardPage() {
       </div>
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 sm:p-6 border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="p-4 sm:p-6 border-b flex flex-col md:flex-row md:items-center justify-between gap-4 bg-muted/20">
           <div>
-            <h3 className="font-bold text-base sm:text-lg">Institutional Partnerships</h3>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">Showing active records matching your institutional filter.</p>
+            <h3 className="font-bold text-base sm:text-lg text-primary">Institutional Partnerships</h3>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              {user?.role === 'student' 
+                ? "Visibility restricted to Approved partnerships only." 
+                : "Showing active institutional records matching your profile."
+              }
+            </p>
           </div>
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input className="pl-10 h-9 text-sm" placeholder="Filter agreements..." value={search} onChange={e => setSearch(e.target.value)} />
+            <Input className="pl-10 h-9 text-sm border-primary/20 focus:ring-primary" placeholder="Filter agreements..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
         
@@ -230,10 +245,10 @@ export default function DashboardPage() {
                 <tr key={m.id} className="hover:bg-muted/5 transition-colors">
                   <td className="px-4 sm:px-6 py-4">
                     <div className="font-semibold line-clamp-1">{m.companyName}</div>
-                    <div className="text-[10px] text-muted-foreground">{m.hteId}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono">{m.hteId}</div>
                   </td>
                   <td className="px-4 sm:px-6 py-4 text-xs font-medium">{m.college}</td>
-                  <td className="px-4 sm:px-6 py-4 text-xs">{m.industryType}</td>
+                  <td className="px-4 sm:px-6 py-4 text-xs uppercase text-muted-foreground font-semibold">{m.industryType}</td>
                   <td className="px-4 sm:px-6 py-4">
                     <span className={cn(
                       "px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase whitespace-nowrap",
@@ -243,15 +258,15 @@ export default function DashboardPage() {
                     </span>
                   </td>
                   <td className="px-4 sm:px-6 py-4 text-right">
-                    <Button variant="ghost" size="sm" asChild className="h-8 w-8 p-0">
+                    <Button variant="ghost" size="sm" asChild className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary">
                       <Link href="/dashboard/moas"><ArrowRight className="w-4 h-4" /></Link>
                     </Button>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={5} className="px-4 sm:px-6 py-12 text-center text-muted-foreground">
-                    {isMoaLoading ? "Synchronizing records..." : "No active agreements found matching your criteria."}
+                  <td colSpan={5} className="px-4 sm:px-6 py-12 text-center text-muted-foreground italic">
+                    {isMoaLoading ? "Synchronizing records..." : "No authorized agreements found matching your institutional filters."}
                   </td>
                 </tr>
               )}
