@@ -20,14 +20,15 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
+  // Navigation items are calculated dynamically based on the current user's role
   const navItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'MOA List', href: '/dashboard/moas', icon: FileText },
   ];
 
   if (user?.role === 'admin') {
-    navItems.push({ label: 'User Management', href: '/dashboard/admin/users', icon: Users });
-    navItems.push({ label: 'Audit Logs', href: '/dashboard/admin/audit-logs', icon: History });
+    navItems.push({ label: 'User Registry', href: '/dashboard/admin/users', icon: Users });
+    navItems.push({ label: 'System Logs', href: '/dashboard/admin/audit-logs', icon: History });
   }
 
   return (
@@ -51,9 +52,9 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                  "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-all",
                   isActive 
-                    ? "bg-primary text-primary-foreground" 
+                    ? "bg-primary text-primary-foreground shadow-sm" 
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
@@ -67,20 +68,20 @@ export function Sidebar() {
 
       <div className="p-4 border-t space-y-4">
         <div className="px-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Logged in as</p>
-          <div className="mt-1 flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">
-              {user?.name?.charAt(0) || 'U'}
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Active Profile</p>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold shadow-inner">
+              {user?.fullName?.charAt(0) || 'U'}
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate capitalize">{user?.role}</p>
+              <p className="text-sm font-bold truncate text-foreground">{user?.fullName}</p>
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter capitalize">{user?.role}</p>
             </div>
           </div>
         </div>
         <Button 
           variant="outline" 
-          className="w-full justify-start gap-3 border-none hover:bg-destructive/10 hover:text-destructive"
+          className="w-full justify-start gap-3 border-none hover:bg-destructive/5 hover:text-destructive transition-colors"
           onClick={logout}
         >
           <LogOut className="w-4 h-4" />

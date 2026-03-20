@@ -29,17 +29,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoadingProfile(true);
         const docRef = doc(firestore, 'users', firebaseUser.uid);
         
+        // Real-time listener ensures role changes from Admin are reflected immediately
         unsubscribe = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
+            const role = (data.role as string || 'student').toLowerCase() as Role;
+            
             setProfile({
               id: firebaseUser.uid,
               fullName: data.fullName || firebaseUser.displayName || 'User',
               email: data.email || firebaseUser.email || '',
-              role: (data.role as string).toLowerCase() as Role,
-              canAddMoa: !!data.canAddMoa || data.role === 'admin',
-              canEditMoa: !!data.canEditMoa || data.role === 'admin',
-              canDeleteMoa: !!data.canDeleteMoa || data.role === 'admin',
+              role: role,
+              // Permissions derived directly from Firestore or Admin role override
+              canAddMoa: !!data.canAddMoa || role === 'admin',
+              canEditMoa: !!data.canEditMoa || role === 'admin',
+              canDeleteMoa: !!data.canDeleteMoa || role === 'admin',
               isBlocked: data.isBlocked === true,
               createdAt: data.createdAt,
             });
@@ -48,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setIsLoadingProfile(false);
         }, (error) => {
+          console.error("AuthContext: Profile sync error", error);
           setIsLoadingProfile(false);
         });
       } else {

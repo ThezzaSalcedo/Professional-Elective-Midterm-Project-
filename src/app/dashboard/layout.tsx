@@ -16,14 +16,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Basic session guard
+    // If not loading and no user, send to login
     if (!isLoading && !user) {
       router.push('/');
+      return;
     }
 
-    // Admin route protection
-    if (!isLoading && user && pathname.startsWith('/dashboard/admin') && user.role !== 'admin') {
-      router.push('/dashboard');
+    // Role-based route guard: If role changes and user is on a restricted path, redirect
+    if (!isLoading && user) {
+      const isAdminRoute = pathname.startsWith('/dashboard/admin');
+      if (isAdminRoute && user.role !== 'admin') {
+        router.push('/dashboard');
+      }
     }
   }, [user, isLoading, router, pathname]);
 
@@ -36,11 +40,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground font-medium">Verifying Credentials...</p>
+        <p className="text-muted-foreground font-medium">Synchronizing Institutional Profile...</p>
       </div>
     );
   }
 
+  // Handle blocked accounts immediately
   if (user?.isBlocked) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-muted/30 p-4 text-center">
