@@ -10,22 +10,25 @@ service cloud.firestore {
 
     // Helper: Check if the email belongs to the institutional domain
     function isInstitutionalEmail() {
-      return isSignedIn() && request.auth.token.email.toLocaleLowerCase().endsWith('@neu.edu.ph');
+      return isSignedIn() && request.auth.token.email.lower().endsWith('@neu.edu.ph');
     }
 
     // Helper: Get user document
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data : null;
     }
 
     // Helper: Check if user has a specific role
     function hasRole(role) {
-      return isSignedIn() && isInstitutionalEmail() && getUserData().role == role;
+      let userData = getUserData();
+      return isSignedIn() && isInstitutionalEmail() && userData != null && userData.role == role;
     }
 
     // Helper: Check if user is blocked
     function isNotBlocked() {
-      return isSignedIn() && isInstitutionalEmail() && getUserData().isBlocked == false;
+      let userData = getUserData();
+      return isSignedIn() && isInstitutionalEmail() && userData != null && userData.isBlocked == false;
     }
 
     match /users/{userId} {
