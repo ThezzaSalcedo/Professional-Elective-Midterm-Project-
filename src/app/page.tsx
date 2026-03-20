@@ -10,15 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Loader2, AlertCircle, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { doc, setDoc } from 'firebase/firestore';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 export default function HomePage() {
   const { user, firebaseUser, isLoading: isAuthLoading, logout } = useAuth();
   const { auth, firestore } = useFirebase();
+  const { toast } = useToast();
   const router = useRouter();
   
   const [email, setEmail] = useState('');
@@ -32,7 +34,6 @@ export default function HomePage() {
     setHasMounted(true);
   }, []);
 
-  // Landing page logic: Only redirect if profile is fully loaded and confirmed
   useEffect(() => {
     if (user && !isAuthLoading && hasMounted) {
       router.push('/dashboard');
@@ -77,6 +78,26 @@ export default function HomePage() {
       if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
       if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
       setErrorMessage(msg);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setErrorMessage("Please enter your institutional email first.");
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast({
+        title: "Reset Link Sent",
+        description: `Check ${email} for password recovery instructions.`
+      });
+      setErrorMessage(null);
+    } catch (error: any) {
+      setErrorMessage("Failed to send reset email. Verify your address.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -126,7 +147,6 @@ export default function HomePage() {
 
   if (!hasMounted) return null;
 
-  // If loading the profile for a returning user, show a loader
   if (isAuthLoading && firebaseUser) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
@@ -136,7 +156,6 @@ export default function HomePage() {
     );
   }
 
-  // If signed in but no profile exists, prompt to finish registration
   if (firebaseUser && !user && !isAuthLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
@@ -189,9 +208,21 @@ export default function HomePage() {
                 <Label htmlFor="password">Password</Label>
                 <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
-              <Button type="submit" className="w-full" disabled={isProcessing}>
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Sign In"}
-              </Button>
+              <div className="flex flex-col gap-3">
+                <Button type="submit" className="w-full" disabled={isProcessing}>
+                  {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Sign In"}
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  size="sm" 
+                  className="text-muted-foreground text-xs"
+                  onClick={handleForgotPassword}
+                  disabled={isProcessing}
+                >
+                  Forgot institutional password?
+                </Button>
+              </div>
             </form>
           </TabsContent>
 

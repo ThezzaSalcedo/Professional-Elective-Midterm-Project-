@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { 
   ShieldCheck, 
   Ban, 
@@ -15,9 +16,10 @@ import {
   UserPlus,
   ShieldAlert,
   Save,
-  ChevronDown,
   Edit2,
-  Trash2
+  Trash2,
+  KeyRound,
+  Mail
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +47,7 @@ type AccessLevel = 'VIEWER' | 'CONTRIBUTOR' | 'EDITOR' | 'MANAGER';
 
 export default function UserManagementPage() {
   const { user: currentUser } = useAuth();
-  const { firestore } = useFirebase();
+  const { firestore, auth } = useFirebase();
   const { toast } = useToast();
   
   const [isAdding, setIsAdding] = useState(false);
@@ -70,6 +72,24 @@ export default function UserManagementPage() {
     if (u.canEditMoa) return 'EDITOR';
     if (u.canAddMoa) return 'CONTRIBUTOR';
     return 'VIEWER';
+  };
+
+  const handleSendResetEmail = (email: string, name: string) => {
+    if (!auth) return;
+    sendPasswordResetEmail(auth, email)
+      .then(() => {
+        toast({
+          title: "Recovery Email Sent",
+          description: `An institutional password reset link has been dispatched to ${name}.`
+        });
+      })
+      .catch(() => {
+        toast({
+          variant: "destructive",
+          title: "Synchronization Error",
+          description: "Could not initiate password reset for this account."
+        });
+      });
   };
 
   const handleAccessLevelChange = async (userId: string, level: AccessLevel, name: string) => {
@@ -306,7 +326,7 @@ export default function UserManagementPage() {
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm min-w-[900px]">
+          <table className="w-full text-xs sm:text-sm min-w-[950px]">
             <thead className="bg-muted/50 border-b">
               <tr>
                 <th className="px-6 py-4 text-left font-semibold">Institutional User</th>
@@ -370,7 +390,10 @@ export default function UserManagementPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleSendResetEmail(u.email, u.fullName)} title="Send Password Reset">
+                        <KeyRound className="w-4 h-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                         <Edit2 className="w-4 h-4" />
                       </Button>
