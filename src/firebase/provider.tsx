@@ -7,6 +7,8 @@ import { Firestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged, signOut } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
 import { useRouter } from 'next/navigation';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 interface FirebaseProviderProps {
   children: ReactNode;
@@ -76,7 +78,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       auth,
       async (firebaseUser) => {
         if (firebaseUser) {
-          // Strict Domain Guard: Immediately sign out if not using the institutional domain
           const email = firebaseUser.email?.toLowerCase() || '';
           if (!email.endsWith('@neu.edu.ph')) {
             await signOut(auth);
@@ -96,13 +97,12 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
           try {
             const docSnap = await getDoc(userRef);
             if (!docSnap.exists()) {
-              // Sequential Profile Creation: Ensure every institutional user has a DB entry
               let roleName = 'student';
               const lowerEmail = email.toLowerCase();
               if (lowerEmail.includes('admin')) roleName = 'admin';
               else if (lowerEmail.includes('faculty')) roleName = 'faculty';
 
-              await setDoc(userRef, {
+              const profileData = {
                 id: firebaseUser.uid,
                 email: email,
                 fullName: firebaseUser.displayName || 'Institutional User',
@@ -112,10 +112,17 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                 canDeleteMoa: roleName === 'admin',
                 isBlocked: false,
                 createdAt: new Date().toISOString()
-              });
+              };
+
+              await setDoc(userRef, profileData);
             }
-          } catch (err) {
-            console.error("FirebaseProvider: Profile synchronization error:", err);
+          } catch (err: any) {
+            // Surface contextual error for security rules debugging
+            const permissionError = new FirestorePermissionError({
+              path: userRef.path,
+              operation: 'get',
+            });
+            errorEmitter.emit('permission-error', permissionError);
           } finally {
             setUserAuthState(prev => ({ ...prev, isProfileLoading: false }));
           }

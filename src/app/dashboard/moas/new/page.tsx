@@ -89,7 +89,6 @@ export default function NewMoaPage() {
       updatedAt: timestamp
     };
 
-    // Prepare System Log
     const logRef = collection(firestore, 'audit_logs');
     const logData: Omit<SystemLog, 'id'> = {
       userId: firebaseUser.uid,
@@ -102,10 +101,16 @@ export default function NewMoaPage() {
       details: `Initialized new institutional partnership for ${formData.companyName}.`
     };
 
-    // Sequential writes for integrity
     setDoc(moaRef, finalData)
       .then(() => {
-        addDoc(logRef, logData);
+        addDoc(logRef, logData).catch(err => {
+          const logPermError = new FirestorePermissionError({
+            path: logRef.path,
+            operation: 'create',
+            requestResourceData: logData,
+          });
+          errorEmitter.emit('permission-error', logPermError);
+        });
         toast({ title: "Success", description: "MOA has been successfully added to the registry." });
         router.push('/dashboard/moas');
       })

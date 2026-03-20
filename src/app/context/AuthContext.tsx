@@ -5,6 +5,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, Role } from '../lib/types';
 import { useFirebase, useUser } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 type AuthContextType = {
   user: User | null;
@@ -29,19 +31,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoadingProfile(true);
         const docRef = doc(firestore, 'users', firebaseUser.uid);
         
-        // Real-time listener ensures role, permission, and block changes are reflected immediately
         unsubscribe = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
             const role = (data.role as string || 'student').toLowerCase() as Role;
             
-            // Re-map profile state with updated institutional rights
             setProfile({
               id: firebaseUser.uid,
               fullName: data.fullName || firebaseUser.displayName || 'User',
               email: data.email || firebaseUser.email || '',
               role: role,
-              // Admin role always overrides individual flags for system integrity
               canAddMoa: role === 'admin' || !!data.canAddMoa,
               canEditMoa: role === 'admin' || !!data.canEditMoa,
               canDeleteMoa: role === 'admin' || !!data.canDeleteMoa,
@@ -53,7 +52,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setIsLoadingProfile(false);
         }, (error) => {
-          console.error("AuthContext: Profile synchronization error", error);
+          // Surface contextual permission error
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'get',
+          });
+          errorEmitter.emit('permission-error', permissionError);
           setIsLoadingProfile(false);
         });
       } else {
