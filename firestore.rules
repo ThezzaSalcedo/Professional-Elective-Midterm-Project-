@@ -31,11 +31,15 @@ service cloud.firestore {
     }
 
     match /moas/{moaId} {
-      // Students see only APPROVED active records
+      // Students see only APPROVED active records. 
+      // Query must include where('isDeleted', '==', false) and status range.
       allow list, get: if isSignedIn() && isNotBlocked() && (
         hasRole('admin') || 
         hasRole('faculty') || 
-        (hasRole('student') && resource.data.isDeleted == false && resource.data.status >= 'APPROVED')
+        (hasRole('student') && 
+         resource.data.isDeleted == false && 
+         resource.data.status >= 'APPROVED' && 
+         resource.data.status < 'APPROVEE')
       );
 
       // Writes restricted to admin or authorized faculty

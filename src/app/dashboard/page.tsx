@@ -41,6 +41,17 @@ export default function DashboardPage() {
     const base = collection(firestore, 'moas');
     
     if (user.role === 'admin') return base;
+    
+    if (user.role === 'student') {
+      // Students MUST query with specific filters to satisfy security rules
+      return query(base, 
+        where('isDeleted', '==', false),
+        where('status', '>=', 'APPROVED'),
+        where('status', '<', 'APPROVEE')
+      );
+    }
+    
+    // Faculty sees all non-deleted records
     return query(base, where('isDeleted', '==', false));
   }, [firestore, user]);
 
@@ -48,11 +59,11 @@ export default function DashboardPage() {
 
   const visibleMoas = useMemo(() => {
     if (!moas) return [];
+    
     let filtered = moas;
-    if (user?.role === 'student') {
-      filtered = filtered.filter(m => m.status && m.status.startsWith('APPROVED'));
-    }
-
+    // Query already filters for students, so no extra status check needed here
+    // but we can keep it for extra safety.
+    
     if (!search) return filtered;
     const q = search.toLowerCase();
     return filtered.filter(m => 
@@ -62,18 +73,15 @@ export default function DashboardPage() {
       m.industryType.toLowerCase().includes(q) ||
       m.address.toLowerCase().includes(q)
     );
-  }, [moas, search, user?.role]);
+  }, [moas, search]);
 
   const stats = useMemo(() => {
     if (!moas) return [];
-    const sourceSet = user?.role === 'student' 
-      ? moas.filter(m => m.status?.startsWith('APPROVED'))
-      : moas.filter(m => !m.isDeleted);
     
-    const active = sourceSet.filter(m => m.status?.startsWith('APPROVED')).length;
-    const processing = sourceSet.filter(m => m.status?.startsWith('PROCESSING')).length;
+    const active = moas.filter(m => m.status?.startsWith('APPROVED')).length;
+    const processing = moas.filter(m => m.status?.startsWith('PROCESSING')).length;
     
-    const expiringSoon = sourceSet.filter(m => {
+    const expiringSoon = moas.filter(m => {
       if (!m.effectiveDate) return false;
       const expiry = new Date(m.effectiveDate);
       expiry.setFullYear(expiry.getFullYear() + 1); 
@@ -82,7 +90,7 @@ export default function DashboardPage() {
       return diffDays > 0 && diffDays <= 60;
     }).length;
 
-    const expired = sourceSet.filter(m => m.status === 'EXPIRED').length;
+    const expired = moas.filter(m => m.status === 'EXPIRED').length;
 
     return [
       { title: 'Active Agreements', value: active, icon: CheckCircle2, color: 'bg-green-500' },
@@ -90,7 +98,7 @@ export default function DashboardPage() {
       { title: 'Expiring Soon', value: expiringSoon, icon: AlertTriangle, color: 'bg-orange-500' },
       { title: 'Expired', value: expired, icon: FileX2, color: 'bg-red-500' },
     ];
-  }, [moas, user?.role, now]);
+  }, [moas, now]);
 
   const handleSeedData = async () => {
     if (!firestore || !user || !firebaseUser) return;
@@ -166,6 +174,24 @@ export default function DashboardPage() {
           )}
         </div>
       </header>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Synchronization Error</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
+
+      {isIndexBuilding && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Database className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-800">Optimizing Database</AlertTitle>
+          <AlertDescription className="text-blue-700">
+            The dashboard is currently optimizing its database for your role. This may take a few minutes.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((s) => (

@@ -18,13 +18,14 @@ import {
   Mail,
   User,
   MapPin,
-  History
+  History,
+  Database
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -124,7 +125,7 @@ export default function MoaListPage() {
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Partnership Registry</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-primary">Partnership Registry</h1>
           <p className="text-xs text-muted-foreground mt-1">
             Institutional {user?.role} repository. Use search to filter specific records.
           </p>
@@ -148,7 +149,18 @@ export default function MoaListPage() {
       {error && !isIndexBuilding && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Permission Restricted</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
+
+      {isIndexBuilding && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Database className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-800">Optimizing Database</AlertTitle>
+          <AlertDescription className="text-blue-700">
+            The dashboard is currently optimizing its database for your role. This may take a few minutes.
+          </AlertDescription>
         </Alert>
       )}
 

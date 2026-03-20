@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
@@ -92,6 +93,9 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                   email: email,
                   fullName: firebaseUser.displayName || 'Institutional User',
                   role: roleName,
+                  canAddMoa: roleName !== 'student',
+                  canEditMoa: roleName !== 'student',
+                  canDeleteMoa: roleName === 'admin',
                   isBlocked: false,
                   createdAt: new Date().toISOString()
                 });
